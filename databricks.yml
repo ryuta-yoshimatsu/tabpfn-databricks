@@ -17,3 +17,16 @@ targets:
 sync:
   include:
     - "notebooks/*.ipynb"
+
+# Databricks Apps resources
+resources:
+  apps:
+    tabpfn_prediction_app:
+      name: "tabpfn-prediction-app"
+      description: "TabPFN Prediction App - Make predictions using TabPFN foundation model"
+      source_code_path: ./apps
+
+      # App permissions (who can access the app)
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${workspace.current_user.userName}

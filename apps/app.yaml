@@ -1,0 +1,27 @@
+# Databricks App Configuration
+# This file defines how the app runs in the Databricks Apps environment
+
+command:
+  - "streamlit"
+  - "run"
+  - "app.py"
+  - "--server.port"
+  - "8000"
+  - "--server.address"
+  - "0.0.0.0"
+
+env:
+  # Databricks SQL Warehouse HTTP Path
+  # Replace with your warehouse HTTP path, e.g., /sql/1.0/warehouses/abc123
+  - name: DATABRICKS_HTTP_PATH
+    value: ""
+  # TabPFN API Token
+  # Get your token from https://docs.priorlabs.ai/
+  - name: TABPFN_TOKEN
+    value: ""
+  # Disable Streamlit usage stats
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"
+  # Disable Streamlit welcome message
+  - name: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+    value: "false"
