@@ -1,19 +1,80 @@
-# TabPFN on Databricks
+# TabPFN on Databricks - Retail/CPG Planning Analytics
 
 [![Databricks](https://img.shields.io/badge/Databricks-Solution_Accelerator-FF3621?style=for-the-badge&logo=databricks)](https://databricks.com)
 [![Unity Catalog](https://img.shields.io/badge/Unity_Catalog-Enabled-00A1C9?style=for-the-badge)](https://docs.databricks.com/en/data-governance/unity-catalog/index.html)
 [![Serverless](https://img.shields.io/badge/Serverless-Compute-00C851?style=for-the-badge)](https://docs.databricks.com/en/compute/serverless.html)
 
-A comprehensive solution accelerator demonstrating how to use **TabPFN** (Tabular Prior-Data Fitted Network) on Databricks for classification, regression, outlier detection, and time series forecasting tasks.
+A comprehensive solution accelerator demonstrating how to use **TabPFN** (Tabular Prior-Data Fitted Network) on Databricks for **retail/CPG supply chain planning analytics**.
 
 ## Overview
 
-[TabPFN](https://priorlabs.ai/) is a foundation model for tabular data developed by Prior Labs. It provides state-of-the-art performance without hyperparameter tuning, making it ideal for rapid prototyping and production ML workflows.
+### The Challenge: Enterprise-Scale Predictive Analytics
 
-This project provides:
-- **Interactive Notebooks** demonstrating TabPFN capabilities for various ML tasks
-- **Streamlit App** for interactive predictions on Unity Catalog data
-- **Databricks Asset Bundle** for easy deployment and CI/CD integration
+Within a global retail and consumer packaged goods (CPG) company, demand and supply planning spans many interconnected business processes:
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Demand Planning │───▶│ Supply Planning │───▶│ Production      │───▶│ Distribution    │
+│                 │    │                 │    │ Planning        │    │ Planning        │
+│ • Forecasting   │    │ • Supplier Risk │    │ • Yield Pred.   │    │ • DRP           │
+│ • Price Elast.  │    │ • Lead Time     │    │ • Scrap Detect. │    │ • Transportation│
+│ • Promo Lift    │    │ • Material      │    │ • Capacity      │    │ • Network Opt.  │
+│                 │    │   Shortage      │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+For each of these processes, there is typically one or more teams of data scientists responsible for:
+- **Sourcing and cleaning data** from disparate systems
+- **Analyzing patterns** and building features
+- **Training models** and tuning hyperparameters
+- **Deploying and monitoring** models in production
+- **Continuously evaluating** performance and retraining
+
+At enterprise scale, this creates **significant operational overhead**. Organizations often maintain large model portfolios—potentially **thousands or even millions of models** across products, SKUs, regions, customers, and planning levels. Maintaining this at high quality requires substantial human effort, and hiring and retaining large teams of experienced data scientists is **extremely costly**.
+
+### The Solution: Foundation Models for Tabular Data
+
+**Imagine a pretrained model that:**
+- Works **out of the box** on tabular data
+- Requires **minimal preprocessing**
+- Eliminates the need for **model training, hyperparameter tuning, and complex experimentation**
+- Delivers performance **comparable to, or better than**, many carefully tuned traditional models
+
+This is exactly what [**TabPFN**](https://priorlabs.ai/) enables.
+
+TabPFN (Tabular Prior-Data Fitted Network) is a **foundation model for tabular prediction** developed by Prior Labs. It has been pretrained on millions of synthetic datasets to learn general patterns in tabular data, allowing it to make accurate predictions on new datasets **without any training**.
+
+**Key benefits:**
+- **Zero training time**: Predictions in seconds, not hours
+- **No hyperparameter tuning**: Works out of the box
+- **Strong default performance**: Competitive with tuned XGBoost, Random Forest, and other traditional models
+- **Built-in uncertainty quantification**: Get prediction intervals, not just point estimates
+- **Reduced operational complexity**: One model architecture for many use cases
+
+### Beyond Retail/CPG
+
+This paradigm shift is **not limited to retail and CPG**. The same opportunity applies broadly across industries with large-scale tabular prediction needs:
+
+| Industry | Example Use Cases |
+|----------|-------------------|
+| **Financial Services (FSI)** | Credit scoring, fraud detection, churn prediction, risk modeling |
+| **Manufacturing (MFG)** | Predictive maintenance, quality prediction, yield optimization |
+| **Health & Life Sciences (HLS)** | Patient risk stratification, clinical trial optimization, drug discovery |
+| **Energy & Utilities** | Demand forecasting, outage prediction, asset management |
+| **Telecommunications** | Network optimization, customer lifetime value, service quality |
+
+## Use Cases (Retail/CPG)
+
+This solution accelerator demonstrates TabPFN across the retail/CPG planning value chain:
+
+| Use Case | ML Task | Planning Process | Business Value |
+|----------|---------|------------------|----------------|
+| **Supplier Delay Risk** | Binary Classification | Supply Planning | Proactive risk mitigation |
+| **Material Shortage** | Multi-class Classification | Material Planning | Prioritize procurement actions |
+| **Price Elasticity** | Regression | Demand Planning | Optimize pricing strategies |
+| **Promotion Lift** | Regression | Demand Planning | Optimize trade promotion ROI |
+| **Scrap Anomaly Detection** | Anomaly Detection | Production Planning | Early quality issue detection |
+| **Demand Forecasting** | Time Series | Demand Planning | Inventory & capacity planning |
 
 ## Features
 
@@ -25,6 +86,7 @@ This project provides:
 | **Time Series Forecasting** | Lag-based forecasting with TabPFN Regressor |
 | **Unity Catalog Integration** | Read/write data from Delta tables |
 | **Databricks App** | Interactive Streamlit UI for predictions |
+| **Realistic Datasets** | Synthetic retail/CPG data with business-relevant features |
 
 ## Project Structure
 
@@ -35,15 +97,16 @@ tabpfn-databricks/
 │   ├── app.yaml                    # App deployment configuration
 │   └── requirements.txt            # App dependencies
 ├── notebooks/                      # Jupyter notebooks
-│   ├── 00_data_preparation.ipynb   # Dataset setup and preparation
-│   ├── 01_classification.ipynb     # Binary & multi-class classification
-│   ├── 02_regression.ipynb         # Regression with uncertainty
-│   ├── 03_outlier_detection.ipynb  # Anomaly detection
-│   └── 04_time_series_forecasting.ipynb  # Time series forecasting
+│   ├── 00_data_preparation.ipynb   # Generate retail/CPG datasets
+│   ├── 01_classification.ipynb     # Supplier delay & shortage prediction
+│   ├── 02_regression.ipynb         # Price elasticity & promotion lift
+│   ├── 03_outlier_detection.ipynb  # Production scrap anomaly detection
+│   └── 04_time_series_forecasting.ipynb  # Demand forecasting
+├── scripts/                        # Utility scripts
+│   ├── util.py                     # Data generation functions
+│   └── cleanup.sh                  # Resource cleanup
 ├── .github/workflows/              # CI/CD pipelines
 │   └── databricks-ci.yml           # Databricks Asset Bundle CI
-├── scripts/                        # Utility scripts
-│   └── cleanup.sh                  # Resource cleanup
 ├── dashboards/                     # Databricks dashboards (placeholder)
 ├── databricks.yml                  # Databricks Asset Bundle configuration
 ├── requirements.txt                # Project dependencies
@@ -118,52 +181,56 @@ print(token)
 ## Notebooks Overview
 
 ### 00_data_preparation.ipynb
-Prepares all datasets used in the demo notebooks and stores them as Delta tables in Unity Catalog.
+Generates realistic retail/CPG planning datasets and stores them as Delta tables in Unity Catalog.
 
 **Datasets:**
-| Table | Description | Task |
-|-------|-------------|------|
-| `breast_cancer` | Binary classification (569 samples, 30 features) | Classification |
-| `iris` | Multi-class classification (150 samples, 4 features) | Classification |
-| `california_housing` | Regression (20,640 samples, 8 features) | Regression |
-| `tourism_monthly` | Synthetic time series (50 series, 120 months each) | Forecasting |
+
+| Table | Task | Planning Process | Samples | Features |
+|-------|------|------------------|---------|----------|
+| `supplier_delay_risk` | Binary Classification | Supply Planning | 2,000 | 14 |
+| `material_shortage` | Multi-class Classification | Material Planning | 1,500 | 15 |
+| `price_elasticity` | Regression | Demand Planning | 3,000 | 13 |
+| `promotion_lift` | Regression | Demand Planning | 2,500 | 15 |
+| `scrap_anomaly` | Anomaly Detection | Production Planning | 1,000 | 13 |
+| `demand_forecast` | Time Series | Demand Planning | 1,800 | 7 |
 
 ### 01_classification.ipynb
-Demonstrates binary and multi-class classification:
-- TabPFN classifier setup and training
-- Probability estimates and confidence scores
-- Model comparison with Random Forest, Gradient Boosting, and Logistic Regression
-- Cross-validation evaluation
+Demonstrates supply chain risk classification:
+- **Supplier Delay Risk**: Predict which deliveries will be delayed
+- **Material Shortage**: Predict shortage risk levels (No Risk, At Risk, Critical)
+- Model comparison with Random Forest, Gradient Boosting, Logistic Regression
+- Business impact quantification
 
 ### 02_regression.ipynb
-Shows regression capabilities with uncertainty quantification:
-- TabPFN regressor for continuous predictions
+Shows demand planning regression with uncertainty:
+- **Price Elasticity**: Predict price sensitivity by product/market
+- **Promotion Lift**: Forecast incremental sales from promotions
 - 90% prediction intervals using quantile regression
-- Model comparison with traditional regressors
-- Visualization of predictions vs actuals
+- Promotion ROI calculator demonstration
 
 ### 03_outlier_detection.ipynb
-Demonstrates anomaly detection using TabPFN:
-- Semi-supervised anomaly detection approach
+Demonstrates production anomaly detection:
+- Semi-supervised anomaly detection using TabPFN
 - Comparison with Isolation Forest and Local Outlier Factor
-- ROC AUC evaluation for anomaly scoring
+- Business value: Early detection of equipment issues, quality problems
+- Feature importance analysis for anomaly patterns
 
 ### 04_time_series_forecasting.ipynb
-Shows time series forecasting with lag features:
-- Feature engineering with lag variables
-- Multi-step ahead forecasting
-- Batch forecasting for multiple series
-- Evaluation with MAE, RMSE, and MAPE metrics
+Shows demand forecasting with lag features:
+- Feature engineering with lag and calendar variables
+- Uncertainty quantification for safety stock planning
+- Batch forecasting across multiple series
+- Aggregate forecast reconciliation
 
 ## Databricks App
 
-The project includes a Streamlit-based Databricks App for interactive predictions.
+The project includes a Streamlit-based Databricks App for interactive supply chain analytics.
 
 ### Features
-- Select datasets from Unity Catalog Delta tables
-- Choose target variables for prediction
-- Run TabPFN classification or regression
-- View predictions and model performance metrics
+- Select planning use cases from dropdown
+- Run TabPFN predictions on Unity Catalog data
+- View predictions with business context
+- Identify high-risk items for proactive action
 
 ### Configuration
 
@@ -181,6 +248,32 @@ cd apps
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+## Data Generation
+
+The `scripts/util.py` module provides functions to generate realistic retail/CPG datasets:
+
+```python
+from util import (
+    generate_supplier_delay_risk_data,
+    generate_material_shortage_data,
+    generate_price_elasticity_data,
+    generate_promotion_lift_data,
+    generate_scrap_anomaly_data,
+    generate_aggregate_demand_forecast_data,
+)
+
+# Generate supplier delay risk data
+df = generate_supplier_delay_risk_data(n_samples=2000, seed=42)
+```
+
+Each dataset includes realistic features such as:
+- SKU, store, DC, region identifiers
+- Calendar features (month, week, season)
+- Pricing and promotion attributes
+- Inventory and lead time metrics
+- Supplier characteristics
+- Production parameters
 
 ## Compute Requirements
 
