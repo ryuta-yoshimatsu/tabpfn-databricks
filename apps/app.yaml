@@ -11,14 +11,29 @@ command:
   - "0.0.0.0"
 
 env:
+  # =============================================================================
+  # REQUIRED: Configure these before deploying
+  # =============================================================================
+  
   # Databricks SQL Warehouse HTTP Path
-  # Replace with your warehouse HTTP path, e.g., /sql/1.0/warehouses/abc123
+  # To find this:
+  #   1. Go to your Databricks workspace
+  #   2. Navigate to SQL Warehouses
+  #   3. Select your warehouse and click "Connection details"
+  #   4. Copy the HTTP Path (e.g., /sql/1.0/warehouses/abc123def456)
   - name: DATABRICKS_HTTP_PATH
-    value: ""
+    value: "/sql/1.0/warehouses/YOUR_WAREHOUSE_ID"
+  
   # TabPFN API Token
   # Get your token from https://docs.priorlabs.ai/
+  # You can also retrieve it by running: tabpfn_client.get_access_token()
   - name: TABPFN_TOKEN
-    value: ""
+    value: "YOUR_TABPFN_TOKEN"
+  
+  # =============================================================================
+  # Optional: Streamlit configuration
+  # =============================================================================
+  
   # Disable Streamlit usage stats
   - name: STREAMLIT_GATHER_USAGE_STATS
     value: "false"

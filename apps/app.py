@@ -205,18 +205,10 @@ def run_regression(X_train, X_test, y_train, y_test):
     }
 
 
-# Sidebar configuration
-st.sidebar.header("⚙️ Configuration")
+# Get configuration from environment variables (set in app.yaml)
+http_path = os.environ.get("DATABRICKS_HTTP_PATH", "")
 
-# SQL Warehouse HTTP Path
-http_path = st.sidebar.text_input(
-    "SQL Warehouse HTTP Path",
-    value=os.environ.get("DATABRICKS_HTTP_PATH", ""),
-    placeholder="/sql/1.0/warehouses/xxxxxx",
-    help="Enter the HTTP path for your Databricks SQL warehouse",
-)
-
-# Dataset selection
+# Sidebar - Use Case Selection
 st.sidebar.header("📊 Use Case Selection")
 selected_dataset_name = st.sidebar.selectbox(
     "Select Planning Use Case",
@@ -230,25 +222,59 @@ selected_dataset = AVAILABLE_DATASETS[selected_dataset_name]
 st.sidebar.info(selected_dataset["description"])
 st.sidebar.markdown(selected_dataset["business_context"])
 
-# Main content
-if not http_path:
-    st.warning("⚠️ Please enter your SQL Warehouse HTTP Path in the sidebar to continue.")
+# Show connection status in sidebar
+st.sidebar.divider()
+st.sidebar.header("🔗 Connection Status")
+if http_path and not http_path.startswith("YOUR_"):
+    st.sidebar.success("SQL Warehouse: Configured")
+else:
+    st.sidebar.error("SQL Warehouse: Not configured")
+
+tabpfn_token = os.environ.get("TABPFN_TOKEN", "")
+if tabpfn_token and not tabpfn_token.startswith("YOUR_"):
+    st.sidebar.success("TabPFN: Configured")
+else:
+    st.sidebar.error("TabPFN: Not configured")
+
+# Main content - Check configuration
+if not http_path or http_path.startswith("YOUR_"):
+    st.error("⚠️ SQL Warehouse not configured")
     st.info("""
+    **To configure the SQL Warehouse:**
+    
+    Edit the `app.yaml` file and set the `DATABRICKS_HTTP_PATH` environment variable:
+    
+    ```yaml
+    env:
+      - name: DATABRICKS_HTTP_PATH
+        value: "/sql/1.0/warehouses/your_warehouse_id"
+    ```
+    
     **To find your SQL Warehouse HTTP Path:**
     1. Go to your Databricks workspace
-    2. Navigate to SQL Warehouses
-    3. Select your warehouse and click "Connection details"
-    4. Copy the HTTP Path
+    2. Navigate to **SQL Warehouses**
+    3. Select your warehouse and click **Connection details**
+    4. Copy the **HTTP Path**
     """)
     st.stop()
 
 # Authenticate TabPFN
 if not authenticate_tabpfn():
-    st.error("❌ TabPFN token not found. Please set the TABPFN_TOKEN environment variable.")
+    st.error("⚠️ TabPFN token not configured")
     st.info("""
-    **To set up TabPFN authentication:**
-    1. Get your TabPFN token from [Prior Labs](https://docs.priorlabs.ai/)
-    2. Set it as an environment variable in your app configuration
+    **To configure TabPFN authentication:**
+    
+    Edit the `app.yaml` file and set the `TABPFN_TOKEN` environment variable:
+    
+    ```yaml
+    env:
+      - name: TABPFN_TOKEN
+        value: "your_tabpfn_token"
+    ```
+    
+    **To get your TabPFN token:**
+    1. Sign up at [Prior Labs](https://docs.priorlabs.ai/)
+    2. Run `tabpfn_client.get_access_token()` to retrieve your token
     """)
     st.stop()
 

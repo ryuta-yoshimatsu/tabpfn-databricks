@@ -234,18 +234,31 @@ The project includes a Streamlit-based Databricks App for interactive supply cha
 
 ### Configuration
 
-The app is configured via `apps/app.yaml`:
+The app is configured via `apps/app.yaml`. Before deploying, update the environment variables:
 
-| Environment Variable | Description |
-|---------------------|-------------|
-| `DATABRICKS_HTTP_PATH` | SQL Warehouse HTTP path (e.g., `/sql/1.0/warehouses/abc123`) |
-| `TABPFN_TOKEN` | Your TabPFN API token |
+```yaml
+env:
+  - name: DATABRICKS_HTTP_PATH
+    value: "/sql/1.0/warehouses/your_warehouse_id"
+  - name: TABPFN_TOKEN
+    value: "your_tabpfn_token"
+```
+
+| Environment Variable | Description | How to Find |
+|---------------------|-------------|-------------|
+| `DATABRICKS_HTTP_PATH` | SQL Warehouse HTTP path | SQL Warehouses → Select warehouse → Connection details |
+| `TABPFN_TOKEN` | TabPFN API token | Run `tabpfn_client.get_access_token()` or visit [Prior Labs](https://docs.priorlabs.ai/) |
 
 ### Running Locally
 
 ```bash
 cd apps
 pip install -r requirements.txt
+
+# Set environment variables
+export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/your_warehouse_id"
+export TABPFN_TOKEN="your_tabpfn_token"
+
 streamlit run app.py
 ```
 
