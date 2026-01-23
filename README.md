@@ -65,8 +65,12 @@ This solution accelerator demonstrates TabPFN across the retail/CPG planning val
 | **Price Elasticity** | Regression | Demand Planning | Optimize pricing strategies |
 | **Promotion Lift** | Regression | Demand Planning | Optimize trade promotion ROI |
 | **Supplier Delay Risk** | Binary Classification | Supply Planning | Proactive risk mitigation |
+| **Supplier Lead Time** | Regression | Supply Planning | Improve planning accuracy |
 | **Material Shortage** | Multi-class Classification | Supply Planning | Prioritize procurement actions |
+| **Labor Shortage** | Multi-class Classification | Production Planning | Workforce planning |
+| **Yield Prediction** | Regression | Production Planning | Capacity planning |
 | **Scrap Anomaly Detection** | Anomaly Detection | Production Planning | Early quality issue detection |
+| **Transportation Lead Time** | Regression | Distribution Planning | Delivery planning |
 
 ## Features
 
@@ -189,28 +193,36 @@ Generates realistic retail/CPG planning datasets and stores them as Delta tables
 
 **Datasets:**
 
-| Table | Task | Planning Process | Samples | Features |
-|-------|------|------------------|---------|----------|
-| `supplier_delay_risk` | Binary Classification | Supply Planning | 2,000 | 14 |
-| `material_shortage` | Multi-class Classification | Material Planning | 1,500 | 15 |
-| `price_elasticity` | Regression | Demand Planning | 3,000 | 13 |
-| `promotion_lift` | Regression | Demand Planning | 2,500 | 15 |
-| `scrap_anomaly` | Anomaly Detection | Production Planning | 1,000 | 13 |
-| `demand_forecast` | Time Series | Demand Planning | 1,800 | 7 |
+| Table | Task | Planning Process | Samples |
+|-------|------|------------------|---------|
+| `demand_forecast` | Time Series | Demand Planning | 1,800 |
+| `price_elasticity` | Regression | Demand Planning | 3,000 |
+| `promotion_lift` | Regression | Demand Planning | 2,500 |
+| `supplier_delay_risk` | Binary Classification | Supply Planning | 2,000 |
+| `supplier_lead_time` | Regression | Supply Planning | 2,000 |
+| `material_shortage` | Multi-class Classification | Supply Planning | 1,500 |
+| `labor_shortage` | Multi-class Classification | Production Planning | 1,500 |
+| `yield_prediction` | Regression | Production Planning | 2,000 |
+| `scrap_anomaly` | Anomaly Detection | Production Planning | 1,000 |
+| `transportation_lead_time` | Regression | Distribution Planning | 2,000 |
 
 ### 01_classification.ipynb
 Demonstrates supply chain risk classification:
-- **Supplier Delay Risk**: Predict which deliveries will be delayed
-- **Material Shortage**: Predict shortage risk levels (No Risk, At Risk, Critical)
+- **Supplier Delay Risk** (Supply Planning): Predict which deliveries will be delayed
+- **Material Shortage** (Supply Planning): Predict shortage risk levels (No Risk, At Risk, Critical)
+- **Labor Shortage** (Production Planning): Predict workforce availability issues
 - Model comparison with Random Forest, Gradient Boosting, Logistic Regression
 - Business impact quantification
 
 ### 02_regression.ipynb
-Shows demand planning regression with uncertainty:
-- **Price Elasticity**: Predict price sensitivity by product/market
-- **Promotion Lift**: Forecast incremental sales from promotions
-- 90% prediction intervals using quantile regression
-- Promotion ROI calculator demonstration
+Shows regression with uncertainty across the planning value chain:
+- **Price Elasticity** (Demand Planning): Predict price sensitivity by product/market
+- **Promotion Lift** (Demand Planning): Forecast incremental sales from promotions
+- **Supplier Lead Time** (Supply Planning): Predict actual delivery times
+- **Yield Prediction** (Production Planning): Predict production output yield
+- **Transportation Lead Time** (Distribution Planning): Predict shipment transit times
+- 80% prediction intervals using quantile regression
+- Model comparison and business applications
 
 ### 03_outlier_detection.ipynb
 Demonstrates production anomaly detection:
@@ -272,11 +284,19 @@ The `scripts/util.py` module provides functions to generate realistic retail/CPG
 
 ```python
 from util import (
+    # Classification
     generate_supplier_delay_risk_data,
     generate_material_shortage_data,
+    generate_labor_shortage_data,
+    # Regression
     generate_price_elasticity_data,
     generate_promotion_lift_data,
+    generate_supplier_lead_time_data,
+    generate_transportation_lead_time_data,
+    generate_yield_prediction_data,
+    # Anomaly Detection
     generate_scrap_anomaly_data,
+    # Time Series
     generate_aggregate_demand_forecast_data,
 )
 

@@ -6,8 +6,8 @@ analytics demonstrations, covering the end-to-end value chain from demand
 planning to supply planning.
 
 Use Cases Covered:
-- Classification: Supplier delay risk, material shortage prediction
-- Regression: Price elasticity, promotion lift, supplier lead time, yield prediction
+- Classification: Supplier delay risk, material shortage prediction, labor shortage prediction
+- Regression: Price elasticity, promotion lift, supplier lead time, transportation lead time, yield prediction
 - Anomaly Detection: Scrap/defect detection, production anomalies
 - Time Series: Demand forecasting by SKU/Store/DC
 """
@@ -209,6 +209,99 @@ def generate_supplier_delay_risk_data(n_samples: int = 2000, seed: int = 42) -> 
         'fuel_price_index': np.round(fuel_price_index, 3),
         'weather_risk_score': np.round(weather_risk_score, 3),
         'is_delayed': is_delayed
+    })
+    
+    return df
+
+
+def generate_labor_shortage_data(n_samples: int = 1500, seed: int = 42) -> pd.DataFrame:
+    """
+    Generate dataset for predicting labor shortage risk at facilities.
+    
+    Features include workforce metrics, demand signals, and external factors.
+    Target: shortage_risk (0 = Adequate, 1 = At Risk, 2 = Critical)
+    
+    Use case: Production Planning - Predict labor availability issues
+    """
+    np.random.seed(seed)
+    
+    # Facility characteristics
+    facility_types = np.random.choice(['Warehouse', 'Manufacturing', 'Distribution Center'],
+                                       n_samples, p=[0.35, 0.40, 0.25])
+    facility_size = np.random.choice(['Small', 'Medium', 'Large'], n_samples, p=[0.3, 0.45, 0.25])
+    regions = np.random.choice(['Northeast', 'Southeast', 'Midwest', 'West'],
+                                n_samples, p=[0.25, 0.25, 0.25, 0.25])
+    
+    # Current workforce metrics
+    current_headcount = np.random.randint(50, 500, n_samples)
+    target_headcount = current_headcount * np.random.uniform(0.9, 1.2, n_samples)
+    headcount_ratio = current_headcount / target_headcount
+    turnover_rate_monthly = np.random.beta(2, 10, n_samples)  # typically 2-15%
+    avg_tenure_months = np.random.exponential(18, n_samples)
+    open_positions = np.random.poisson(8, n_samples)
+    
+    # Demand and workload
+    forecasted_volume_change = np.random.uniform(-0.2, 0.4, n_samples)
+    overtime_hours_last_month = np.random.exponential(200, n_samples)
+    absenteeism_rate = np.random.beta(2, 20, n_samples)
+    
+    # Labor market factors
+    local_unemployment_rate = np.random.uniform(0.03, 0.12, n_samples)
+    competitor_wage_ratio = np.random.uniform(0.85, 1.15, n_samples)  # our wage / market
+    job_posting_response_rate = np.random.beta(3, 7, n_samples)
+    
+    # Seasonality
+    month = np.random.randint(1, 13, n_samples)
+    is_peak_hiring_season = ((month >= 9) & (month <= 11)).astype(int)  # pre-holiday
+    
+    # Training and pipeline
+    training_pipeline_count = np.random.poisson(5, n_samples)
+    avg_time_to_fill_days = np.random.exponential(30, n_samples)
+    
+    # Generate target based on realistic relationships
+    shortage_score = (
+        0.4  # base
+        - 0.5 * (headcount_ratio - 0.9)  # understaffed = higher risk
+        + 0.4 * turnover_rate_monthly * 10
+        - 0.2 * (avg_tenure_months > 24).astype(float)
+        + 0.02 * open_positions
+        + 0.3 * np.clip(forecasted_volume_change, 0, 1)
+        + 0.15 * (overtime_hours_last_month > 300).astype(float)
+        + 0.2 * absenteeism_rate * 10
+        - 0.3 * local_unemployment_rate * 5  # higher unemployment = easier hiring
+        - 0.2 * (competitor_wage_ratio > 1.0).astype(float)  # paying above market
+        - 0.15 * job_posting_response_rate
+        + 0.1 * is_peak_hiring_season
+        + 0.01 * avg_time_to_fill_days / 30
+        - 0.02 * training_pipeline_count
+        + np.random.normal(0, 0.1, n_samples)
+    )
+    
+    # Convert to multi-class
+    shortage_risk = np.where(shortage_score < 0.35, 0,  # Adequate
+                            np.where(shortage_score < 0.6, 1, 2))  # At Risk / Critical
+    
+    df = pd.DataFrame({
+        'facility_type': facility_types,
+        'facility_size': facility_size,
+        'region': regions,
+        'current_headcount': current_headcount,
+        'target_headcount': np.round(target_headcount, 0).astype(int),
+        'headcount_ratio': np.round(headcount_ratio, 3),
+        'turnover_rate_monthly': np.round(turnover_rate_monthly, 3),
+        'avg_tenure_months': np.round(avg_tenure_months, 1),
+        'open_positions': open_positions,
+        'forecasted_volume_change_pct': np.round(forecasted_volume_change, 3),
+        'overtime_hours_last_month': np.round(overtime_hours_last_month, 0).astype(int),
+        'absenteeism_rate': np.round(absenteeism_rate, 3),
+        'local_unemployment_rate': np.round(local_unemployment_rate, 3),
+        'competitor_wage_ratio': np.round(competitor_wage_ratio, 3),
+        'job_posting_response_rate': np.round(job_posting_response_rate, 3),
+        'month': month,
+        'is_peak_hiring_season': is_peak_hiring_season,
+        'training_pipeline_count': training_pipeline_count,
+        'avg_time_to_fill_days': np.round(avg_time_to_fill_days, 0).astype(int),
+        'labor_shortage_risk': shortage_risk
     })
     
     return df
@@ -621,6 +714,107 @@ def generate_yield_prediction_data(n_samples: int = 2000, seed: int = 42) -> pd.
         'ambient_temperature_f': np.round(ambient_temperature, 1),
         'ambient_humidity_pct': np.round(ambient_humidity, 1),
         'yield_percentage': np.round(yield_pct, 2)
+    })
+    
+    return df
+
+
+def generate_transportation_lead_time_data(n_samples: int = 2000, seed: int = 42) -> pd.DataFrame:
+    """
+    Generate dataset for predicting transportation/delivery lead times.
+    
+    Features include shipment characteristics, route information, and logistics factors.
+    Target: actual_transit_days
+    
+    Use case: Distribution Planning - Predict delivery times for logistics optimization
+    """
+    np.random.seed(seed)
+    
+    # Shipment characteristics
+    shipment_types = np.random.choice(['Full Truckload', 'LTL', 'Parcel', 'Intermodal'],
+                                       n_samples, p=[0.3, 0.35, 0.2, 0.15])
+    weight_lbs = np.random.exponential(2000, n_samples) + 100
+    volume_cubic_ft = weight_lbs / np.random.uniform(8, 15, n_samples)  # density varies
+    n_pallets = np.ceil(volume_cubic_ft / 80).astype(int)  # ~80 cu ft per pallet
+    is_hazmat = np.random.binomial(1, 0.05, n_samples)
+    is_temperature_controlled = np.random.binomial(1, 0.15, n_samples)
+    
+    # Route information
+    origin_regions = np.random.choice(['Northeast', 'Southeast', 'Midwest', 'West', 'Southwest'],
+                                       n_samples)
+    dest_regions = np.random.choice(['Northeast', 'Southeast', 'Midwest', 'West', 'Southwest'],
+                                     n_samples)
+    distance_miles = np.random.uniform(100, 3000, n_samples)
+    n_stops = np.random.choice([1, 2, 3, 4, 5], n_samples, p=[0.5, 0.25, 0.15, 0.07, 0.03])
+    is_cross_border = np.random.binomial(1, 0.08, n_samples)
+    
+    # Carrier and service
+    carrier_tiers = np.random.choice(['Premium', 'Standard', 'Economy'],
+                                      n_samples, p=[0.2, 0.55, 0.25])
+    carrier_on_time_rating = np.random.beta(8, 2, n_samples)
+    service_level = np.random.choice(['Next Day', '2-Day', 'Ground', 'Economy'],
+                                      n_samples, p=[0.1, 0.2, 0.5, 0.2])
+    
+    # Timing factors
+    ship_day_of_week = np.random.choice(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+                                         n_samples, p=[0.2, 0.2, 0.2, 0.2, 0.15, 0.05])
+    ship_month = np.random.randint(1, 13, n_samples)
+    is_peak_shipping_season = ((ship_month >= 10) & (ship_month <= 12)).astype(int)
+    
+    # External factors
+    fuel_surcharge_pct = np.random.uniform(0.05, 0.25, n_samples)
+    weather_delay_probability = np.random.uniform(0, 0.3, n_samples)
+    port_congestion_index = np.random.uniform(0, 1, n_samples) * is_cross_border
+    
+    # Calculate base transit time
+    base_transit = (
+        1.5  # minimum
+        + distance_miles / 500  # ~500 miles per day average
+        + 0.5 * (n_stops - 1)  # each stop adds time
+        + 2 * is_cross_border
+        + 1 * is_hazmat
+        + 0.5 * is_temperature_controlled
+    )
+    
+    # Adjust for service level and carrier
+    service_multiplier = {'Next Day': 0.3, '2-Day': 0.5, 'Ground': 1.0, 'Economy': 1.3}
+    carrier_multiplier = {'Premium': 0.85, 'Standard': 1.0, 'Economy': 1.2}
+    
+    actual_transit = (
+        base_transit
+        * np.array([service_multiplier[s] for s in service_level])
+        * np.array([carrier_multiplier[c] for c in carrier_tiers])
+        - 0.5 * carrier_on_time_rating
+        + 0.5 * is_peak_shipping_season
+        + 2 * weather_delay_probability
+        + 1 * port_congestion_index
+        + 0.3 * (ship_day_of_week == 'Fri').astype(float)
+        + 0.5 * (ship_day_of_week == 'Sat').astype(float)
+        + np.random.normal(0, 0.5, n_samples)
+    )
+    actual_transit = np.clip(actual_transit, 1, 15).round(0).astype(int)
+    
+    df = pd.DataFrame({
+        'shipment_type': shipment_types,
+        'weight_lbs': np.round(weight_lbs, 0).astype(int),
+        'volume_cubic_ft': np.round(volume_cubic_ft, 1),
+        'num_pallets': n_pallets,
+        'is_hazmat': is_hazmat,
+        'is_temperature_controlled': is_temperature_controlled,
+        'origin_region': origin_regions,
+        'destination_region': dest_regions,
+        'distance_miles': np.round(distance_miles, 0).astype(int),
+        'num_stops': n_stops,
+        'is_cross_border': is_cross_border,
+        'carrier_tier': carrier_tiers,
+        'carrier_on_time_rating': np.round(carrier_on_time_rating, 3),
+        'service_level': service_level,
+        'ship_day_of_week': ship_day_of_week,
+        'ship_month': ship_month,
+        'is_peak_shipping_season': is_peak_shipping_season,
+        'fuel_surcharge_pct': np.round(fuel_surcharge_pct, 3),
+        'weather_delay_probability': np.round(weather_delay_probability, 3),
+        'actual_transit_days': actual_transit
     })
     
     return df
@@ -1044,25 +1238,45 @@ if __name__ == "__main__":
     print(f"   Shape: {df_shortage.shape}")
     print(f"   Target distribution: {df_shortage['shortage_risk'].value_counts().to_dict()}\n")
     
+    print("3. Labor Shortage Data:")
+    df_labor = generate_labor_shortage_data(n_samples=100)
+    print(f"   Shape: {df_labor.shape}")
+    print(f"   Target distribution: {df_labor['labor_shortage_risk'].value_counts().to_dict()}\n")
+    
     # Regression
-    print("3. Price Elasticity Data:")
+    print("4. Price Elasticity Data:")
     df_elasticity = generate_price_elasticity_data(n_samples=100)
     print(f"   Shape: {df_elasticity.shape}")
     print(f"   Target range: [{df_elasticity['price_elasticity'].min():.2f}, {df_elasticity['price_elasticity'].max():.2f}]\n")
     
-    print("4. Promotion Lift Data:")
+    print("5. Promotion Lift Data:")
     df_promo = generate_promotion_lift_data(n_samples=100)
     print(f"   Shape: {df_promo.shape}")
     print(f"   Target range: [{df_promo['promotion_lift_pct'].min():.1f}%, {df_promo['promotion_lift_pct'].max():.1f}%]\n")
     
+    print("6. Supplier Lead Time Data:")
+    df_supplier_lt = generate_supplier_lead_time_data(n_samples=100)
+    print(f"   Shape: {df_supplier_lt.shape}")
+    print(f"   Target range: [{df_supplier_lt['actual_lead_time_days'].min()}, {df_supplier_lt['actual_lead_time_days'].max()}] days\n")
+    
+    print("7. Transportation Lead Time Data:")
+    df_transport_lt = generate_transportation_lead_time_data(n_samples=100)
+    print(f"   Shape: {df_transport_lt.shape}")
+    print(f"   Target range: [{df_transport_lt['actual_transit_days'].min()}, {df_transport_lt['actual_transit_days'].max()}] days\n")
+    
+    print("8. Yield Prediction Data:")
+    df_yield = generate_yield_prediction_data(n_samples=100)
+    print(f"   Shape: {df_yield.shape}")
+    print(f"   Target range: [{df_yield['yield_percentage'].min():.1f}%, {df_yield['yield_percentage'].max():.1f}%]\n")
+    
     # Anomaly Detection
-    print("5. Scrap Anomaly Data:")
+    print("9. Scrap Anomaly Data:")
     df_scrap, labels_scrap = generate_scrap_anomaly_data(n_samples=100)
     print(f"   Shape: {df_scrap.shape}")
     print(f"   Anomaly rate: {labels_scrap.mean():.1%}\n")
     
     # Time Series
-    print("6. Demand Forecast Data:")
+    print("10. Demand Forecast Data:")
     df_demand = generate_aggregate_demand_forecast_data(n_series=5, n_months=24)
     print(f"   Shape: {df_demand.shape}")
     print(f"   Series: {df_demand['series_id'].nunique()}")

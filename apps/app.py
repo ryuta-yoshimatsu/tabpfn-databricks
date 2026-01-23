@@ -5,11 +5,15 @@ This Streamlit app provides an interactive interface for supply chain planning
 analytics using TabPFN, a foundation model for tabular data.
 
 Use Cases:
-- Supplier Delay Risk Prediction (Classification)
-- Material Shortage Prediction (Multi-class Classification)
+- Demand Forecasting (Time Series)
 - Price Elasticity Prediction (Regression)
 - Promotion Lift Prediction (Regression)
-- Demand Forecasting (Time Series)
+- Supplier Delay Risk Prediction (Classification)
+- Supplier Lead Time Prediction (Regression)
+- Material Shortage Prediction (Multi-class Classification)
+- Labor Shortage Prediction (Multi-class Classification)
+- Yield Prediction (Regression)
+- Transportation Lead Time Prediction (Regression)
 """
 
 import streamlit as st
@@ -44,8 +48,10 @@ st.markdown("""
 **End-to-end supply chain planning powered by TabPFN**, a foundation model for tabular data.
 
 This app demonstrates predictive analytics across the retail/CPG planning value chain:
-- **Demand Planning**: Demand forecasting, price elasticity, promotion lift prediction
-- **Supply Planning**: Supplier delay risk, material shortage prediction
+- **Demand Planning**: Demand forecasting, price elasticity, promotion lift
+- **Supply Planning**: Supplier delay risk, supplier lead time, material shortage
+- **Production Planning**: Labor shortage, yield prediction
+- **Distribution Planning**: Transportation lead time
 """)
 
 # Databricks configuration
@@ -56,28 +62,19 @@ CATALOG = "tabpfn_databricks"
 SCHEMA = "default"
 
 AVAILABLE_DATASETS = {
-    "Supplier Delay Risk (Classification)": {
-        "table": f"{CATALOG}.{SCHEMA}.supplier_delay_risk",
-        "task": "classification",
-        "description": "Predict which supplier deliveries will be delayed",
-        "default_target": "is_delayed",
-        "target_names": ["On-Time", "Delayed"],
-        "exclude_cols": [],
+    # ===== DEMAND PLANNING =====
+    "Demand Forecasting (Time Series)": {
+        "table": f"{CATALOG}.{SCHEMA}.demand_forecast",
+        "task": "forecasting",
+        "description": "Forecast product demand by category and region using lag features",
+        "default_target": "demand_units",
+        "series_id_col": "series_id",
+        "date_col": "date",
+        "exclude_cols": ["series_id", "date", "category", "region"],
+        "planning_process": "Demand Planning",
         "business_context": """
-        **Business Value**: Enable proactive supply risk mitigation by identifying 
-        high-risk deliveries before they impact production.
-        """
-    },
-    "Material Shortage (Multi-class)": {
-        "table": f"{CATALOG}.{SCHEMA}.material_shortage",
-        "task": "classification",
-        "description": "Predict material shortage risk levels (No Risk, At Risk, Critical)",
-        "default_target": "shortage_risk",
-        "target_names": ["No Risk", "At Risk", "Critical"],
-        "exclude_cols": [],
-        "business_context": """
-        **Business Value**: Prioritize procurement actions based on shortage risk levels
-        to prevent stockouts and production disruptions.
+        **Business Value**: Drive inventory planning, production scheduling, and 
+        distribution requirements with accurate demand forecasts.
         """
     },
     "Price Elasticity (Regression)": {
@@ -86,6 +83,7 @@ AVAILABLE_DATASETS = {
         "description": "Predict price elasticity of demand for pricing optimization",
         "default_target": "price_elasticity",
         "exclude_cols": [],
+        "planning_process": "Demand Planning",
         "business_context": """
         **Business Value**: Optimize pricing strategies by understanding how price 
         changes affect demand for different products and markets.
@@ -97,22 +95,88 @@ AVAILABLE_DATASETS = {
         "description": "Predict promotional sales lift for trade promotion planning",
         "default_target": "promotion_lift_pct",
         "exclude_cols": [],
+        "planning_process": "Demand Planning",
         "business_context": """
         **Business Value**: Plan promotions with accurate ROI forecasts to optimize
         trade spend and inventory planning.
         """
     },
-    "Demand Forecasting (Time Series)": {
-        "table": f"{CATALOG}.{SCHEMA}.demand_forecast",
-        "task": "forecasting",
-        "description": "Forecast product demand by category and region using lag features",
-        "default_target": "demand_units",
-        "series_id_col": "series_id",
-        "date_col": "date",
-        "exclude_cols": ["series_id", "date", "category", "region"],
+    # ===== SUPPLY PLANNING =====
+    "Supplier Delay Risk (Classification)": {
+        "table": f"{CATALOG}.{SCHEMA}.supplier_delay_risk",
+        "task": "classification",
+        "description": "Predict which supplier deliveries will be delayed",
+        "default_target": "is_delayed",
+        "target_names": ["On-Time", "Delayed"],
+        "exclude_cols": [],
+        "planning_process": "Supply Planning",
         "business_context": """
-        **Business Value**: Drive inventory planning, production scheduling, and 
-        distribution requirements with accurate demand forecasts.
+        **Business Value**: Enable proactive supply risk mitigation by identifying 
+        high-risk deliveries before they impact production.
+        """
+    },
+    "Supplier Lead Time (Regression)": {
+        "table": f"{CATALOG}.{SCHEMA}.supplier_lead_time",
+        "task": "regression",
+        "description": "Predict actual supplier delivery lead times for planning accuracy",
+        "default_target": "actual_lead_time_days",
+        "exclude_cols": [],
+        "planning_process": "Supply Planning",
+        "business_context": """
+        **Business Value**: Improve planning accuracy by predicting actual lead times
+        vs. contracted times, reducing stockouts and expediting costs.
+        """
+    },
+    "Material Shortage (Multi-class)": {
+        "table": f"{CATALOG}.{SCHEMA}.material_shortage",
+        "task": "classification",
+        "description": "Predict material shortage risk levels (No Risk, At Risk, Critical)",
+        "default_target": "shortage_risk",
+        "target_names": ["No Risk", "At Risk", "Critical"],
+        "exclude_cols": [],
+        "planning_process": "Supply Planning",
+        "business_context": """
+        **Business Value**: Prioritize procurement actions based on shortage risk levels
+        to prevent stockouts and production disruptions.
+        """
+    },
+    # ===== PRODUCTION PLANNING =====
+    "Labor Shortage (Multi-class)": {
+        "table": f"{CATALOG}.{SCHEMA}.labor_shortage",
+        "task": "classification",
+        "description": "Predict labor shortage risk at facilities (Adequate, At Risk, Critical)",
+        "default_target": "labor_shortage_risk",
+        "target_names": ["Adequate", "At Risk", "Critical"],
+        "exclude_cols": [],
+        "planning_process": "Production Planning",
+        "business_context": """
+        **Business Value**: Anticipate workforce availability issues to enable proactive
+        overtime scheduling, temp staffing, and cross-training.
+        """
+    },
+    "Yield Prediction (Regression)": {
+        "table": f"{CATALOG}.{SCHEMA}.yield_prediction",
+        "task": "regression",
+        "description": "Predict production yield percentage for capacity planning",
+        "default_target": "yield_percentage",
+        "exclude_cols": [],
+        "planning_process": "Production Planning",
+        "business_context": """
+        **Business Value**: Optimize capacity planning and raw material requirements
+        by accurately predicting production output yield.
+        """
+    },
+    # ===== DISTRIBUTION PLANNING =====
+    "Transportation Lead Time (Regression)": {
+        "table": f"{CATALOG}.{SCHEMA}.transportation_lead_time",
+        "task": "regression",
+        "description": "Predict shipment transit times for delivery planning",
+        "default_target": "actual_transit_days",
+        "exclude_cols": [],
+        "planning_process": "Distribution Planning",
+        "business_context": """
+        **Business Value**: Improve delivery promises and warehouse planning by
+        accurately predicting actual transit times.
         """
     },
 }
@@ -291,7 +355,9 @@ selected_dataset_name = st.sidebar.selectbox(
 
 selected_dataset = AVAILABLE_DATASETS[selected_dataset_name]
 
-# Show description and business context
+# Show planning process, description and business context
+if "planning_process" in selected_dataset:
+    st.sidebar.markdown(f"**Planning Process:** {selected_dataset['planning_process']}")
 st.sidebar.info(selected_dataset["description"])
 st.sidebar.markdown(selected_dataset["business_context"])
 
@@ -684,12 +750,15 @@ try:
                     st.dataframe(results_df, use_container_width=True)
                     
                     # High-risk items (for supply chain use cases)
-                    if selected_dataset["default_target"] in ["is_delayed", "shortage_risk"]:
+                    if selected_dataset["default_target"] in ["is_delayed", "shortage_risk", "labor_shortage_risk"]:
                         st.subheader("⚠️ High-Risk Items")
                         if selected_dataset["default_target"] == "is_delayed":
                             high_risk_col = "Prob_Delayed"
                             threshold = 0.5
-                        else:
+                        elif selected_dataset["default_target"] == "shortage_risk":
+                            high_risk_col = "Prob_Critical"
+                            threshold = 0.3
+                        else:  # labor_shortage_risk
                             high_risk_col = "Prob_Critical"
                             threshold = 0.3
                         
@@ -773,13 +842,14 @@ This app demonstrates **TabPFN** for retail/CPG supply chain planning analytics.
 
 **Planning Value Chain Coverage:**
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Demand Planning │───▶│ Supply Planning │───▶│ Production      │
-│                 │    │                 │    │ Planning        │
-│ • Price Elast.  │    │ • Supplier Risk │    │ • Scrap Detect. │
-│ • Promo Lift    │    │ • Material      │    │ • Yield Pred.   │
-│ • Forecasting   │    │   Shortage      │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Demand Planning │───▶│ Supply Planning │───▶│ Production      │───▶│ Distribution    │
+│                 │    │                 │    │ Planning        │    │ Planning        │
+│ • Forecasting   │    │ • Supplier Risk │    │ • Labor Short.  │    │ • Transport LT  │
+│ • Price Elast.  │    │ • Supplier LT   │    │ • Yield Pred.   │    │                 │
+│ • Promo Lift    │    │ • Material      │    │                 │    │                 │
+│                 │    │   Shortage      │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 **Resources:**
