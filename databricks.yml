@@ -21,9 +21,9 @@ sync:
 # Databricks Apps resources
 resources:
   apps:
-    tabpfn_prediction_app:
-      name: "tabpfn-prediction-app"
-      description: "TabPFN Prediction App - Make predictions using TabPFN foundation model"
+    tabpfn_databricks_app:
+      name: "tabpfn-databricks"
+      description: "Planning Analytics Hub - Centralized predictive analytics for the entire planning value chain"
       source_code_path: ./apps
 
       # App permissions (who can access the app)
