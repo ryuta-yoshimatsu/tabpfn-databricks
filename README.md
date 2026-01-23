@@ -12,7 +12,7 @@ A comprehensive solution accelerator demonstrating how to use **TabPFN** (Tabula
 
 Across industries, enterprises rely on large-scale tabular prediction to drive critical business decisions—from forecasting demand to assessing risk to optimizing operations. These predictive workloads often span interconnected business processes, each requiring its own set of models, features, and continuous maintenance.
 
-**Consider a global retail and consumer packaged goods (CPG) company**, where demand and supply planning spans many interconnected business processes:
+Consider a global retail and consumer packaged goods (CPG) company, where demand and supply planning spans many interconnected business processes:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -49,10 +49,10 @@ This is exactly what [**TabPFN**](https://priorlabs.ai/) enables.
 TabPFN (Tabular Prior-Data Fitted Network) is a **foundation model for tabular prediction** developed by Prior Labs. It has been pretrained on millions of synthetic datasets to learn general patterns in tabular data, allowing it to make accurate predictions on new datasets **without any training**.
 
 **Key benefits:**
-- **Reduced operational complexity**: One model architecture for many use cases
-- **Zero training time**: Predictions in seconds, not hours
+- **Reduced operational complexity**: One model for many use cases
+- **Zero training time**: Predictions in seconds
 - **No hyperparameter tuning**: Works out of the box
-- **Strong default performance**: Competitive with tuned XGBoost, Random Forest, and other traditional models
+- **Strong default performance**: Competitive with tuned XGBoost, Random Forest, and other models
 - **Built-in uncertainty quantification**: Get prediction intervals, not just point estimates
 
 ## Use Cases (Retail/CPG)
@@ -61,12 +61,12 @@ This solution accelerator demonstrates TabPFN across the retail/CPG planning val
 
 | Use Case | ML Task | Planning Process | Business Value |
 |----------|---------|------------------|----------------|
-| **Supplier Delay Risk** | Binary Classification | Supply Planning | Proactive risk mitigation |
-| **Material Shortage** | Multi-class Classification | Material Planning | Prioritize procurement actions |
+| **Demand Forecasting** | Time Series | Demand Planning | Inventory & capacity planning |
 | **Price Elasticity** | Regression | Demand Planning | Optimize pricing strategies |
 | **Promotion Lift** | Regression | Demand Planning | Optimize trade promotion ROI |
+| **Supplier Delay Risk** | Binary Classification | Supply Planning | Proactive risk mitigation |
+| **Material Shortage** | Multi-class Classification | Supply Planning | Prioritize procurement actions |
 | **Scrap Anomaly Detection** | Anomaly Detection | Production Planning | Early quality issue detection |
-| **Demand Forecasting** | Time Series | Demand Planning | Inventory & capacity planning |
 
 ## Features
 
