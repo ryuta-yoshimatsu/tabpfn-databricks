@@ -1,16 +1,18 @@
-# TabPFN on Databricks - Retail/CPG Planning Analytics
+# TabPFN on Databricks
 
 [![Databricks](https://img.shields.io/badge/Databricks-Solution_Accelerator-FF3621?style=for-the-badge&logo=databricks)](https://databricks.com)
 [![Unity Catalog](https://img.shields.io/badge/Unity_Catalog-Enabled-00A1C9?style=for-the-badge)](https://docs.databricks.com/en/data-governance/unity-catalog/index.html)
 [![Serverless](https://img.shields.io/badge/Serverless-Compute-00C851?style=for-the-badge)](https://docs.databricks.com/en/compute/serverless.html)
 
-A comprehensive solution accelerator demonstrating how to use **TabPFN** (Tabular Prior-Data Fitted Network) on Databricks for **retail/CPG supply chain planning analytics**.
+A comprehensive solution accelerator demonstrating how to use **TabPFN** (Tabular Prior-Data Fitted Network) on Databricks.
 
 ## Overview
 
 ### The Challenge: Enterprise-Scale Predictive Analytics
 
-Within a global retail and consumer packaged goods (CPG) company, demand and supply planning spans many interconnected business processes:
+Across industries, enterprises rely on large-scale tabular prediction to drive critical business decisions—from forecasting demand to assessing risk to optimizing operations. These predictive workloads often span interconnected business processes, each requiring its own set of models, features, and continuous maintenance.
+
+**Consider a global retail and consumer packaged goods (CPG) company**, where demand and supply planning spans many interconnected business processes:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -23,6 +25,8 @@ Within a global retail and consumer packaged goods (CPG) company, demand and sup
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
+This value chain transforms customer demand signals into fulfilled orders. Demand planning generates forecasts that drive supply planning decisions; supply planning determines what to source and when, feeding production schedules; and production output flows into distribution planning for delivery to stores and customers. At each stage, predictive models provide critical inputs—and errors propagate downstream.
+
 For each of these processes, there is typically one or more teams of data scientists responsible for:
 - **Sourcing and cleaning data** from disparate systems
 - **Analyzing patterns** and building features
@@ -30,7 +34,7 @@ For each of these processes, there is typically one or more teams of data scient
 - **Deploying and monitoring** models in production
 - **Continuously evaluating** performance and retraining
 
-At enterprise scale, this creates **significant operational overhead**. Organizations often maintain large model portfolios—potentially **thousands or even millions of models** across products, SKUs, regions, customers, and planning levels. Maintaining this at high quality requires substantial human effort, and hiring and retaining large teams of experienced data scientists is **extremely costly**.
+At enterprise scale, this creates **significant operational overhead**. Organizations often maintain large model portfolios—potentially **thousands or even millions of models** across products, SKUs, regions, customers, and planning levels. Maintaining this at high quality requires substantial human effort, and hiring and retaining large teams of experienced data scientists is **costly**.
 
 ### The Solution: Foundation Models for Tabular Data
 
@@ -45,23 +49,11 @@ This is exactly what [**TabPFN**](https://priorlabs.ai/) enables.
 TabPFN (Tabular Prior-Data Fitted Network) is a **foundation model for tabular prediction** developed by Prior Labs. It has been pretrained on millions of synthetic datasets to learn general patterns in tabular data, allowing it to make accurate predictions on new datasets **without any training**.
 
 **Key benefits:**
+- **Reduced operational complexity**: One model architecture for many use cases
 - **Zero training time**: Predictions in seconds, not hours
 - **No hyperparameter tuning**: Works out of the box
 - **Strong default performance**: Competitive with tuned XGBoost, Random Forest, and other traditional models
 - **Built-in uncertainty quantification**: Get prediction intervals, not just point estimates
-- **Reduced operational complexity**: One model architecture for many use cases
-
-### Beyond Retail/CPG
-
-This paradigm shift is **not limited to retail and CPG**. The same opportunity applies broadly across industries with large-scale tabular prediction needs:
-
-| Industry | Example Use Cases |
-|----------|-------------------|
-| **Financial Services (FSI)** | Credit scoring, fraud detection, churn prediction, risk modeling |
-| **Manufacturing (MFG)** | Predictive maintenance, quality prediction, yield optimization |
-| **Health & Life Sciences (HLS)** | Patient risk stratification, clinical trial optimization, drug discovery |
-| **Energy & Utilities** | Demand forecasting, outage prediction, asset management |
-| **Telecommunications** | Network optimization, customer lifetime value, service quality |
 
 ## Use Cases (Retail/CPG)
 
@@ -87,6 +79,18 @@ This solution accelerator demonstrates TabPFN across the retail/CPG planning val
 | **Unity Catalog Integration** | Read/write data from Delta tables |
 | **Databricks App** | Interactive Streamlit UI for predictions |
 | **Realistic Datasets** | Synthetic retail/CPG data with business-relevant features |
+
+## Beyond Retail/CPG
+
+This paradigm shift is **not limited to retail and CPG**. The same opportunity applies broadly across industries with large-scale tabular prediction needs:
+
+| Industry | Example Use Cases |
+|----------|-------------------|
+| **Financial Services (FSI)** | Credit scoring, fraud detection, churn prediction, risk modeling |
+| **Manufacturing (MFG)** | Predictive maintenance, quality prediction, yield optimization |
+| **Health & Life Sciences (HLS)** | Patient risk stratification, clinical trial optimization, drug discovery |
+| **Energy & Utilities** | Demand forecasting, outage prediction, asset management |
+| **Telecommunications** | Network optimization, customer lifetime value, service quality |
 
 ## Project Structure
 
