@@ -674,11 +674,11 @@ if st.session_state.current_page == "home":
     # Metrics
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown('<div class="metric-card"><div class="metric-number">10</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><div class="metric-number">1</div><div class="metric-label">Foundation Model</div></div>', unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="metric-card metric-card-pink"><div class="metric-number">4</div><div class="metric-label">Planning Processes</div></div>', unsafe_allow_html=True)
     with col3:
-        st.markdown('<div class="metric-card metric-card-cyan"><div class="metric-number">1</div><div class="metric-label">Foundation Model</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card metric-card-cyan"><div class="metric-number">10</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
