@@ -485,6 +485,16 @@ AVAILABLE_DATASETS = {
         "planning_process": "Distribution Planning",
         "business_context": """**Business Value**: Improve delivery promises and warehouse planning by accurately predicting actual transit times."""
     },
+    "OTIF Risk (Multi-class)": {
+        "table": f"{CATALOG}.{SCHEMA}.otif_risk",
+        "task": "classification",
+        "description": "Predict On-Time-In-Full delivery risk (Low, Medium, High Risk)",
+        "default_target": "otif_risk",
+        "target_names": ["Low Risk", "Medium Risk", "High Risk"],
+        "exclude_cols": [],
+        "planning_process": "Distribution Planning",
+        "business_context": """**Business Value**: Proactively identify orders at risk of OTIF failure to enable intervention and improve customer satisfaction."""
+    },
 }
 
 
@@ -664,7 +674,7 @@ if st.session_state.current_page == "home":
     # Metrics
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown('<div class="metric-card"><div class="metric-number">9</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card"><div class="metric-number">10</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="metric-card metric-card-pink"><div class="metric-number">4</div><div class="metric-label">Planning Processes</div></div>', unsafe_allow_html=True)
     with col3:
@@ -698,7 +708,7 @@ if st.session_state.current_page == "home":
     with vc3:
         st.markdown('<div class="process-card process-card-production"><div class="process-title process-title-production">🏭 Production Planning</div><hr style="border-color: rgba(79, 172, 254, 0.2);"><p class="process-item">• Labor Shortage</p><p class="process-item">• Yield Prediction</p></div>', unsafe_allow_html=True)
     with vc4:
-        st.markdown('<div class="process-card process-card-distribution"><div class="process-title process-title-distribution">📦 Distribution</div><hr style="border-color: rgba(0, 212, 170, 0.2);"><p class="process-item">• Transportation Lead Time</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="process-card process-card-distribution"><div class="process-title process-title-distribution">📦 Distribution</div><hr style="border-color: rgba(0, 212, 170, 0.2);"><p class="process-item">• Transportation Lead Time</p><p class="process-item">• OTIF Risk</p></div>', unsafe_allow_html=True)
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     

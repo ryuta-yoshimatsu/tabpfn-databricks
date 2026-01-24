@@ -6,7 +6,7 @@ analytics demonstrations, covering the end-to-end value chain from demand
 planning to supply planning.
 
 Use Cases Covered:
-- Classification: Supplier delay risk, material shortage prediction, labor shortage prediction
+- Classification: Supplier delay risk, material shortage prediction, labor shortage prediction, OTIF risk prediction
 - Regression: Price elasticity, promotion lift, supplier lead time, transportation lead time, yield prediction
 - Anomaly Detection: Scrap/defect detection, production anomalies
 - Time Series: Demand forecasting by SKU/Store/DC
@@ -382,6 +382,136 @@ def generate_material_shortage_data(n_samples: int = 1500, seed: int = 42) -> pd
         'commodity_price_trend': np.round(commodity_price_trend, 3),
         'geopolitical_risk_score': np.round(geopolitical_risk_score, 3),
         'shortage_risk': shortage_risk
+    })
+    
+    return df
+
+
+def generate_otif_risk_data(n_samples: int = 2000, seed: int = 42) -> pd.DataFrame:
+    """
+    Generate dataset for predicting On-Time-In-Full (OTIF) delivery risk.
+    
+    Features include shipment characteristics, customer factors, and logistics conditions.
+    Target: otif_risk (0 = Low Risk/Likely OTIF, 1 = Medium Risk, 2 = High Risk/Likely Failure)
+    
+    Use case: Distribution Planning - Predict which orders are at risk of not being delivered 
+    on-time and in-full to enable proactive intervention
+    """
+    np.random.seed(seed)
+    
+    # Order characteristics
+    order_types = np.random.choice(['Standard', 'Express', 'Same-Day', 'Scheduled'],
+                                    n_samples, p=[0.5, 0.25, 0.1, 0.15])
+    order_size = np.random.choice(['Small', 'Medium', 'Large', 'Bulk'],
+                                   n_samples, p=[0.3, 0.4, 0.2, 0.1])
+    n_line_items = np.random.poisson(5, n_samples) + 1
+    order_value_usd = np.random.exponential(500, n_samples) + 50
+    
+    # Customer characteristics
+    customer_tiers = np.random.choice(['Platinum', 'Gold', 'Silver', 'Bronze'],
+                                       n_samples, p=[0.1, 0.25, 0.35, 0.3])
+    customer_historical_otif = np.random.beta(8, 2, n_samples)  # Historical OTIF performance to this customer
+    customer_order_frequency = np.random.choice(['Daily', 'Weekly', 'Monthly', 'Occasional'],
+                                                 n_samples, p=[0.1, 0.3, 0.35, 0.25])
+    
+    # Fulfillment characteristics
+    fulfillment_source = np.random.choice(['DC', 'Store', 'Vendor Direct', 'Cross-Dock'],
+                                           n_samples, p=[0.45, 0.25, 0.15, 0.15])
+    inventory_availability = np.random.beta(8, 2, n_samples)  # % of items available
+    pick_complexity_score = np.random.uniform(0, 1, n_samples)
+    
+    # Logistics factors
+    distance_miles = np.random.exponential(200, n_samples) + 10
+    carrier_tiers = np.random.choice(['Premium', 'Standard', 'Economy'],
+                                      n_samples, p=[0.2, 0.55, 0.25])
+    carrier_performance_score = np.random.beta(7, 2, n_samples)
+    
+    # Timing factors
+    order_day_of_week = np.random.choice(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+                                          n_samples, p=[0.18, 0.17, 0.17, 0.17, 0.15, 0.1, 0.06])
+    requested_delivery_window = np.random.choice(['Morning', 'Afternoon', 'Evening', 'Anytime'],
+                                                  n_samples, p=[0.15, 0.25, 0.15, 0.45])
+    days_until_delivery = np.random.randint(1, 14, n_samples)
+    
+    # Operational factors
+    warehouse_capacity_utilization = np.random.uniform(0.5, 1.0, n_samples)
+    current_backlog_orders = np.random.poisson(50, n_samples)
+    labor_availability_score = np.random.beta(7, 3, n_samples)
+    
+    # External factors  
+    weather_risk_score = np.random.uniform(0, 1, n_samples)
+    is_peak_season = np.random.binomial(1, 0.25, n_samples)
+    
+    # Generate OTIF risk score based on realistic relationships
+    risk_score = (
+        0.3  # base risk
+        # Order complexity factors
+        + 0.15 * (order_types == 'Same-Day').astype(float)
+        + 0.1 * (order_types == 'Express').astype(float)
+        + 0.1 * (order_size == 'Bulk').astype(float)
+        + 0.05 * (order_size == 'Large').astype(float)
+        + 0.02 * np.clip(n_line_items / 10, 0, 1)
+        
+        # Customer factors
+        - 0.1 * (customer_tiers == 'Platinum').astype(float)  # Priority handling
+        - 0.05 * (customer_tiers == 'Gold').astype(float)
+        - 0.2 * customer_historical_otif  # Good history = less risk
+        
+        # Fulfillment factors
+        - 0.25 * inventory_availability  # Full availability = lower risk
+        + 0.15 * pick_complexity_score
+        + 0.1 * (fulfillment_source == 'Vendor Direct').astype(float)  # Less control
+        
+        # Logistics factors
+        + 0.001 * np.clip(distance_miles / 500, 0, 1)
+        - 0.15 * carrier_performance_score
+        + 0.1 * (carrier_tiers == 'Economy').astype(float)
+        
+        # Timing factors
+        + 0.1 * (order_day_of_week == 'Friday').astype(float)
+        + 0.15 * (order_day_of_week == 'Saturday').astype(float)
+        + 0.1 * (requested_delivery_window == 'Morning').astype(float)
+        - 0.05 * np.clip(days_until_delivery / 7, 0, 1)  # More lead time = less risk
+        
+        # Operational factors
+        + 0.2 * (warehouse_capacity_utilization > 0.85).astype(float)
+        + 0.01 * np.clip(current_backlog_orders / 100, 0, 1)
+        - 0.15 * labor_availability_score
+        
+        # External factors
+        + 0.2 * weather_risk_score
+        + 0.15 * is_peak_season
+        
+        + np.random.normal(0, 0.08, n_samples)
+    )
+    
+    # Convert to multi-class risk levels
+    otif_risk = np.where(risk_score < 0.3, 0,  # Low Risk
+                        np.where(risk_score < 0.55, 1, 2))  # Medium Risk / High Risk
+    
+    df = pd.DataFrame({
+        'order_type': order_types,
+        'order_size': order_size,
+        'num_line_items': n_line_items,
+        'order_value_usd': np.round(order_value_usd, 2),
+        'customer_tier': customer_tiers,
+        'customer_historical_otif_rate': np.round(customer_historical_otif, 3),
+        'customer_order_frequency': customer_order_frequency,
+        'fulfillment_source': fulfillment_source,
+        'inventory_availability_rate': np.round(inventory_availability, 3),
+        'pick_complexity_score': np.round(pick_complexity_score, 3),
+        'distance_miles': np.round(distance_miles, 0).astype(int),
+        'carrier_tier': carrier_tiers,
+        'carrier_performance_score': np.round(carrier_performance_score, 3),
+        'order_day_of_week': order_day_of_week,
+        'requested_delivery_window': requested_delivery_window,
+        'days_until_delivery': days_until_delivery,
+        'warehouse_capacity_utilization': np.round(warehouse_capacity_utilization, 3),
+        'current_backlog_orders': current_backlog_orders,
+        'labor_availability_score': np.round(labor_availability_score, 3),
+        'weather_risk_score': np.round(weather_risk_score, 3),
+        'is_peak_season': is_peak_season,
+        'otif_risk': otif_risk
     })
     
     return df
@@ -1243,40 +1373,45 @@ if __name__ == "__main__":
     print(f"   Shape: {df_labor.shape}")
     print(f"   Target distribution: {df_labor['labor_shortage_risk'].value_counts().to_dict()}\n")
     
+    print("4. OTIF Risk Data:")
+    df_otif = generate_otif_risk_data(n_samples=100)
+    print(f"   Shape: {df_otif.shape}")
+    print(f"   Target distribution: {df_otif['otif_risk'].value_counts().to_dict()}\n")
+    
     # Regression
-    print("4. Price Elasticity Data:")
+    print("5. Price Elasticity Data:")
     df_elasticity = generate_price_elasticity_data(n_samples=100)
     print(f"   Shape: {df_elasticity.shape}")
     print(f"   Target range: [{df_elasticity['price_elasticity'].min():.2f}, {df_elasticity['price_elasticity'].max():.2f}]\n")
     
-    print("5. Promotion Lift Data:")
+    print("6. Promotion Lift Data:")
     df_promo = generate_promotion_lift_data(n_samples=100)
     print(f"   Shape: {df_promo.shape}")
     print(f"   Target range: [{df_promo['promotion_lift_pct'].min():.1f}%, {df_promo['promotion_lift_pct'].max():.1f}%]\n")
     
-    print("6. Supplier Lead Time Data:")
+    print("7. Supplier Lead Time Data:")
     df_supplier_lt = generate_supplier_lead_time_data(n_samples=100)
     print(f"   Shape: {df_supplier_lt.shape}")
     print(f"   Target range: [{df_supplier_lt['actual_lead_time_days'].min()}, {df_supplier_lt['actual_lead_time_days'].max()}] days\n")
     
-    print("7. Transportation Lead Time Data:")
+    print("8. Transportation Lead Time Data:")
     df_transport_lt = generate_transportation_lead_time_data(n_samples=100)
     print(f"   Shape: {df_transport_lt.shape}")
     print(f"   Target range: [{df_transport_lt['actual_transit_days'].min()}, {df_transport_lt['actual_transit_days'].max()}] days\n")
     
-    print("8. Yield Prediction Data:")
+    print("9. Yield Prediction Data:")
     df_yield = generate_yield_prediction_data(n_samples=100)
     print(f"   Shape: {df_yield.shape}")
     print(f"   Target range: [{df_yield['yield_percentage'].min():.1f}%, {df_yield['yield_percentage'].max():.1f}%]\n")
     
     # Anomaly Detection
-    print("9. Scrap Anomaly Data:")
+    print("10. Scrap Anomaly Data:")
     df_scrap, labels_scrap = generate_scrap_anomaly_data(n_samples=100)
     print(f"   Shape: {df_scrap.shape}")
     print(f"   Anomaly rate: {labels_scrap.mean():.1%}\n")
     
     # Time Series
-    print("10. Demand Forecast Data:")
+    print("11. Demand Forecast Data:")
     df_demand = generate_aggregate_demand_forecast_data(n_series=5, n_months=24)
     print(f"   Shape: {df_demand.shape}")
     print(f"   Series: {df_demand['series_id'].nunique()}")

@@ -18,9 +18,9 @@ Consider a global retail and consumer packaged goods (CPG) company, where demand
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │ Demand Planning │───▶│ Supply Planning │───▶│ Production      │───▶│ Distribution    │
 │                 │    │                 │    │ Planning        │    │ Planning        │
-│ • Forecasting   │    │ • Supplier Risk │    │ • Yield Pred.   │    │ • DRP           │
-│ • Price Elast.  │    │ • Lead Time     │    │ • Scrap Detect. │    │ • Transportation│
-│ • Promo Lift    │    │ • Material      │    │ • Capacity      │    │ • Network Opt.  │
+│ • Forecasting   │    │ • Supplier Risk │    │ • Yield Pred.   │    │ • Transport LT  │
+│ • Price Elast.  │    │ • Lead Time     │    │ • Scrap Detect. │    │ • OTIF Risk     │
+│ • Promo Lift    │    │ • Material      │    │ • Capacity      │    │                 │
 │                 │    │   Shortage      │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
@@ -71,6 +71,7 @@ This solution accelerator demonstrates TabPFN across the retail/CPG planning val
 | **Yield Prediction** | Regression | Production Planning | Capacity planning |
 | **Scrap Anomaly Detection** | Anomaly Detection | Production Planning | Early quality issue detection |
 | **Transportation Lead Time** | Regression | Distribution Planning | Delivery planning |
+| **OTIF Risk** | Multi-class Classification | Distribution Planning | Proactive customer service |
 
 ## Features
 
@@ -205,12 +206,14 @@ Generates realistic retail/CPG planning datasets and stores them as Delta tables
 | `yield_prediction` | Regression | Production Planning | 2,000 |
 | `scrap_anomaly` | Anomaly Detection | Production Planning | 1,000 |
 | `transportation_lead_time` | Regression | Distribution Planning | 2,000 |
+| `otif_risk` | Multi-class Classification | Distribution Planning | 2,000 |
 
 ### 01_classification.ipynb
 Demonstrates supply chain risk classification:
 - **Supplier Delay Risk** (Supply Planning): Predict which deliveries will be delayed
 - **Material Shortage** (Supply Planning): Predict shortage risk levels (No Risk, At Risk, Critical)
 - **Labor Shortage** (Production Planning): Predict workforce availability issues
+- **OTIF Risk** (Distribution Planning): Predict on-time-in-full delivery risk (Low, Medium, High Risk)
 - Model comparison with Random Forest, Gradient Boosting, Logistic Regression
 - Business impact quantification
 
@@ -288,6 +291,7 @@ from util import (
     generate_supplier_delay_risk_data,
     generate_material_shortage_data,
     generate_labor_shortage_data,
+    generate_otif_risk_data,
     # Regression
     generate_price_elasticity_data,
     generate_promotion_lift_data,
