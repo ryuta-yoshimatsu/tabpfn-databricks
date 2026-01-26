@@ -630,8 +630,10 @@ with st.sidebar:
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
-    # Navigation
-    page = st.radio("Navigation", ["🏠 Home", "⚡ Predictions"], label_visibility="collapsed")
+    # Navigation - use session state to determine initial selection
+    nav_options = ["🏠 Home", "⚡ Predictions"]
+    current_index = 0 if st.session_state.current_page == "home" else 1
+    page = st.radio("Navigation", nav_options, index=current_index, label_visibility="collapsed")
     st.session_state.current_page = "home" if page == "🏠 Home" else "predictions"
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -1066,58 +1068,97 @@ else:
                         with st.spinner(f"Loading {score_table}..."):
                             df_score = load_table(conn, f"{CATALOG}.{SCHEMA}.{score_table}")
                         
-                        # Train on selected series from _train, predict on same series from _score
+                        # For time series scoring, we need to combine train + score data
+                        # to have sufficient history for lag features, then predict only on score timestamps
                         
                         if series_id_col:
-                            # Filter score data to only the selected series
+                            # Filter to the selected series from both datasets
+                            df_train_series = df_train[df_train[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
                             df_score_series = df_score[df_score[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
                             
                             if len(df_score_series) == 0:
                                 st.error(f"Series '{selected_series}' not found in score dataset.")
                                 st.stop()
                             
-                            if len(df_score_series) < n_lags + 1:
-                                st.error(f"Series '{selected_series}' has insufficient data points for lag features.")
-                                st.stop()
+                            # Combine train and score data for full history
+                            df_combined = pd.concat([df_train_series, df_score_series], ignore_index=True).sort_values(date_col).reset_index(drop=True)
                             
-                            st.info(f"Training on series '{selected_series}' from _train, predicting on same series from _score")
+                            n_train_points = len(df_train_series)
+                            n_score_points = len(df_score_series)
                             
-                            score_values = df_score_series[target_col].values
-                            score_dates = df_score_series[date_col].values
+                            st.info(f"Training on series '{selected_series}' from _train ({n_train_points} points), predicting on _score ({n_score_points} points)")
                             
-                            # Create lag features for score data
-                            X_score_ts, y_score_ts = create_lag_features(score_values, n_lags)
-                            X_score_enhanced = add_calendar_features(X_score_ts, score_dates, n_lags)
+                            combined_values = df_combined[target_col].values
+                            combined_dates = df_combined[date_col].values
                             
-                            # Train model on train data and predict on score data
-                            results = run_forecasting(X_enhanced, y, X_score_enhanced, y_score_ts)
+                            # Create lag features from combined data
+                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
+                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
                             
-                            # Collect predictions (features and predictions only, no labels)
-                            score_dates_subset = pd.to_datetime(score_dates[n_lags:])
+                            # Split: features from train period for training, features from score period for prediction
+                            # After lag features, we lose n_lags points from the start
+                            # Train indices: 0 to (n_train_points - n_lags - 1)
+                            # Score indices: (n_train_points - n_lags) to end
+                            train_end_idx = n_train_points - n_lags
+                            
+                            X_train_ts = X_combined_enhanced[:train_end_idx]
+                            y_train_ts = y_combined[:train_end_idx]
+                            X_score_ts = X_combined_enhanced[train_end_idx:]
+                            
+                            # Run forecasting
+                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
+                            
+                            # Get dates for visualization
+                            all_dates = pd.to_datetime(combined_dates)
+                            train_dates_viz = all_dates[:n_train_points]
+                            train_values_viz = combined_values[:n_train_points]
+                            
+                            # Get score dates (dates corresponding to score predictions)
+                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
+                            score_dates_subset = score_dates_all[train_end_idx:]
+                            
                             predictions_df = pd.DataFrame({
                                 "Series_ID": selected_series,
                                 "Date": score_dates_subset.strftime('%Y-%m-%d'),
                                 "Prediction": results['predictions']
                             })
                         else:
-                            # Single series - train on train, predict on score
-                            df_score_series = df_score.sort_values(date_col).reset_index(drop=True)
+                            # Single series - combine train and score data
+                            df_train_sorted = df_train.sort_values(date_col).reset_index(drop=True)
+                            df_score_sorted = df_score.sort_values(date_col).reset_index(drop=True)
                             
-                            if len(df_score_series) < n_lags + 1:
-                                st.error("Score dataset has insufficient data points for lag features.")
-                                st.stop()
+                            # Combine for full history
+                            df_combined = pd.concat([df_train_sorted, df_score_sorted], ignore_index=True).sort_values(date_col).reset_index(drop=True)
                             
-                            score_values = df_score_series[target_col].values
-                            score_dates = df_score_series[date_col].values
+                            n_train_points = len(df_train_sorted)
+                            n_score_points = len(df_score_sorted)
                             
-                            # Create lag features for score data
-                            X_score_ts, y_score_ts = create_lag_features(score_values, n_lags)
-                            X_score_enhanced = add_calendar_features(X_score_ts, score_dates, n_lags)
+                            combined_values = df_combined[target_col].values
+                            combined_dates = df_combined[date_col].values
                             
-                            # Train on train data, predict on score data
-                            results = run_forecasting(X_enhanced, y, X_score_enhanced, y_score_ts)
+                            # Create lag features from combined data
+                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
+                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
                             
-                            score_dates_subset = pd.to_datetime(score_dates[n_lags:])
+                            # Split features
+                            train_end_idx = n_train_points - n_lags
+                            
+                            X_train_ts = X_combined_enhanced[:train_end_idx]
+                            y_train_ts = y_combined[:train_end_idx]
+                            X_score_ts = X_combined_enhanced[train_end_idx:]
+                            
+                            # Run forecasting
+                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
+                            
+                            # Get dates for visualization
+                            all_dates = pd.to_datetime(combined_dates)
+                            train_dates_viz = all_dates[:n_train_points]
+                            train_values_viz = combined_values[:n_train_points]
+                            
+                            # Get score dates
+                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
+                            score_dates_subset = score_dates_all[train_end_idx:]
+                            
                             predictions_df = pd.DataFrame({
                                 "Date": score_dates_subset.strftime('%Y-%m-%d'),
                                 "Prediction": results['predictions']
@@ -1125,9 +1166,38 @@ else:
                         
                         st.markdown('<div class="section-header">📊 Forecast Predictions on Score Data</div>', unsafe_allow_html=True)
                         
+                        # Visualization
+                        fig, ax = plt.subplots(figsize=(12, 5))
+                        fig.patch.set_facecolor('#f8f7ff')
+                        ax.set_facecolor('#f8f7ff')
+                        
+                        # Plot training data (historical)
+                        ax.plot(train_dates_viz, train_values_viz, color='#667eea', linewidth=1.5, label='Historical (Train)', alpha=0.7)
+                        
+                        # Plot predictions for score period
+                        ax.plot(score_dates_subset, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast (Score)')
+                        
+                        # Add prediction intervals if available
+                        if results.get('y_lower') is not None:
+                            ax.fill_between(score_dates_subset, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
+                        
+                        # Add vertical line at train/score boundary
+                        ax.axvline(x=train_dates_viz.max(), color='#00b894', linestyle=':', linewidth=2, alpha=0.7, label='Train/Score Split')
+                        
+                        ax.set_xlabel('Date', color='#2d2d44')
+                        ax.set_ylabel(target_col, color='#2d2d44')
+                        title = f'Forecast: {selected_series}' if series_id_col else 'Forecast Predictions'
+                        ax.set_title(title, color='#1a1a2e', fontweight='bold')
+                        ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                        ax.tick_params(colors='#4a4a6a')
+                        ax.grid(True, alpha=0.3, color='#667eea')
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.metric("Training Samples", len(y))
+                            st.metric("Training Samples", len(y_train_ts))
                         with col2:
                             st.metric("Score Samples", len(predictions_df))
                         
