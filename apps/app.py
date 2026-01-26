@@ -22,7 +22,9 @@ from sklearn.metrics import (
 import tabpfn_client
 from tabpfn_client import TabPFNClassifier, TabPFNRegressor
 import matplotlib.pyplot as plt
+import mlflow
 import os
+from datetime import datetime
 
 
 # Page configuration
@@ -597,6 +599,121 @@ def run_forecasting(X_train, y_train, X_test=None, y_test=None):
 http_path = os.environ.get("DATABRICKS_HTTP_PATH", "")
 tabpfn_token = os.environ.get("TABPFN_TOKEN", "")
 
+
+def setup_mlflow_experiment(conn):
+    """Set up MLflow experiment using the same naming convention as notebooks."""
+    error_details = []
+    
+    try:
+        # Set MLflow tracking URI to Databricks workspace
+        mlflow.set_tracking_uri("databricks")
+        
+        # Get current user from Databricks SQL
+        cursor = conn.cursor()
+        cursor.execute("SELECT current_user()")
+        current_user = cursor.fetchone()[0]
+        cursor.close()
+        
+        experiment_name = f"/Users/{current_user}/tabpfn-databricks"
+        
+        # Try to get or create the experiment
+        try:
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+            if experiment is None:
+                experiment_id = mlflow.create_experiment(experiment_name)
+                experiment = mlflow.get_experiment(experiment_id)
+            else:
+                experiment_id = experiment.experiment_id
+        except Exception as exp_error:
+            # If get/create fails, try set_experiment as fallback
+            error_details.append(f"get/create experiment: {exp_error}")
+            experiment = mlflow.set_experiment(experiment_name)
+            experiment_id = experiment.experiment_id
+        
+        # Set the experiment as active
+        mlflow.set_experiment(experiment_name)
+        
+        # Get workspace host for constructing URLs
+        workspace_host = cfg.host
+        
+        return {
+            "experiment_name": experiment_name,
+            "experiment_id": experiment_id,
+            "workspace_host": workspace_host,
+            "current_user": current_user,
+        }, None
+    except Exception as e:
+        error_details.append(f"primary setup: {e}")
+        # Fallback experiment name
+        experiment_name = "/Shared/tabpfn-databricks-app"
+        try:
+            mlflow.set_tracking_uri("databricks")
+            experiment = mlflow.set_experiment(experiment_name)
+            experiment_id = experiment.experiment_id
+            workspace_host = cfg.host
+            return {
+                "experiment_name": experiment_name,
+                "experiment_id": experiment_id,
+                "workspace_host": workspace_host,
+                "current_user": "shared",
+                "fallback": True,
+                "error_details": "; ".join(error_details),
+            }, None
+        except Exception as e2:
+            error_details.append(f"fallback setup: {e2}")
+            return None, "; ".join(error_details)
+
+
+def log_to_mlflow(run_name, params, metrics, task_type, operation_mode, mlflow_config=None):
+    """Log evaluation or scoring run to MLflow."""
+    try:
+        # Ensure we're using the correct experiment
+        if mlflow_config and mlflow_config.get('experiment_name'):
+            mlflow.set_experiment(mlflow_config['experiment_name'])
+        
+        with mlflow.start_run(run_name=run_name):
+            # Log common parameters
+            mlflow.log_param("source", "streamlit_app")
+            mlflow.log_param("task_type", task_type)
+            mlflow.log_param("operation_mode", operation_mode)
+            mlflow.log_param("timestamp", datetime.now().isoformat())
+            
+            # Log custom parameters
+            for key, value in params.items():
+                try:
+                    mlflow.log_param(key, value)
+                except Exception:
+                    pass
+            
+            # Log metrics
+            for key, value in metrics.items():
+                try:
+                    if value is not None and not np.isnan(value):
+                        mlflow.log_metric(key, float(value))
+                except Exception:
+                    pass
+            
+            run_id = mlflow.active_run().info.run_id
+            
+            # Construct run URL if config is available
+            run_url = None
+            if mlflow_config:
+                workspace_host = mlflow_config.get("workspace_host", "")
+                experiment_id = mlflow_config.get("experiment_id", "")
+                if workspace_host and experiment_id:
+                    # Remove protocol if already present in host
+                    if workspace_host.startswith("https://"):
+                        base_url = workspace_host
+                    elif workspace_host.startswith("http://"):
+                        base_url = workspace_host
+                    else:
+                        base_url = f"https://{workspace_host}"
+                    run_url = f"{base_url}/#mlflow/experiments/{experiment_id}/runs/{run_id}"
+            
+            return run_id, run_url, None
+    except Exception as e:
+        return None, None, str(e)
+
 # ============================================================================
 # SIDEBAR
 # ============================================================================
@@ -795,6 +912,16 @@ else:
     
     try:
         conn = get_connection(http_path)
+        
+        # Set up MLflow experiment (same as notebooks)
+        mlflow_config, mlflow_error = setup_mlflow_experiment(conn)
+        if mlflow_config:
+            st.sidebar.markdown(f"**MLflow Experiment:**")
+            st.sidebar.code(mlflow_config['experiment_name'], language=None)
+            if mlflow_config.get('fallback'):
+                st.sidebar.warning(f"Using fallback experiment. Error: {mlflow_config.get('error_details', 'unknown')}")
+        elif mlflow_error:
+            st.sidebar.warning(f"MLflow setup failed: {mlflow_error}")
         
         # ====================================================================
         # STEP 1: Select Dataset
@@ -1062,6 +1189,40 @@ else:
                             "Error": y_test_ts - results['predictions']
                         })
                         st.dataframe(results_df, use_container_width=True)
+                        
+                        # Log to MLflow
+                        run_id, run_url, mlflow_err = log_to_mlflow(
+                            run_name=f"app_{selected_base_table}_forecast_eval",
+                            params={
+                                "dataset": selected_base_table,
+                                "model_type": "TabPFNRegressor",
+                                "task": "time_series_forecasting",
+                                "target_col": target_col,
+                                "date_col": date_col,
+                                "series_id": selected_series if series_id_col else "single_series",
+                                "n_lags": n_lags,
+                                "forecast_horizon": forecast_horizon,
+                                "train_samples": len(y_train_ts),
+                                "test_samples": len(y_test_ts),
+                                "random_state": random_state,
+                            },
+                            metrics={
+                                "mae": results['mae'],
+                                "rmse": results['rmse'],
+                                "mape": results['mape'],
+                            },
+                            task_type="forecast",
+                            operation_mode="evaluate",
+                            mlflow_config=mlflow_config
+                        )
+                        if run_id:
+                            if run_url:
+                                st.write(f"📋 MLflow Run: {run_id}")
+                                st.link_button("View in MLflow", run_url)
+                            else:
+                                st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                        elif mlflow_err:
+                            st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                     
                     else:  # Score mode
                         # Load score data
@@ -1203,6 +1364,36 @@ else:
                         
                         st.dataframe(predictions_df, use_container_width=True)
                         
+                        # Log to MLflow
+                        run_id, run_url, mlflow_err = log_to_mlflow(
+                            run_name=f"app_{selected_base_table}_forecast_score",
+                            params={
+                                "dataset": selected_base_table,
+                                "model_type": "TabPFNRegressor",
+                                "task": "time_series_forecasting",
+                                "target_col": target_col,
+                                "date_col": date_col,
+                                "series_id": selected_series if series_id_col else "single_series",
+                                "n_lags": n_lags,
+                                "forecast_horizon": forecast_horizon,
+                                "train_samples": len(y_train_ts),
+                                "score_samples": len(predictions_df),
+                                "random_state": random_state,
+                            },
+                            metrics={},
+                            task_type="forecast",
+                            operation_mode="score",
+                            mlflow_config=mlflow_config
+                        )
+                        if run_id:
+                            if run_url:
+                                st.write(f"📋 MLflow Run: {run_id}")
+                                st.link_button("View in MLflow", run_url)
+                            else:
+                                st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                        elif mlflow_err:
+                            st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
                         # Download button
                         csv = predictions_df.to_csv(index=False)
                         st.download_button(
@@ -1332,6 +1523,37 @@ else:
                                 results_df[f"Prob_Class_{i}"] = results["probabilities"][:, i].round(4)
                             
                             st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_classification_eval",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNClassifier",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_model),
+                                    "test_samples": len(X_test_model),
+                                    "test_size_pct": test_size,
+                                    "random_state": random_state,
+                                    "n_classes": n_classes,
+                                },
+                                metrics={
+                                    "accuracy": results['accuracy'],
+                                    "roc_auc": results.get('roc_auc'),
+                                },
+                                task_type="classification",
+                                operation_mode="evaluate",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                         
                         else:  # Regression
                             results = run_regression(X_train_model, y_train_model, X_test_model, y_test_model)
@@ -1397,6 +1619,37 @@ else:
                                 "Abs Error": np.abs(residuals)
                             })
                             st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_regression_eval",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNRegressor",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_model),
+                                    "test_samples": len(X_test_model),
+                                    "test_size_pct": test_size,
+                                    "random_state": random_state,
+                                },
+                                metrics={
+                                    "rmse": results['rmse'],
+                                    "mae": results['mae'],
+                                    "r2": results['r2'],
+                                },
+                                task_type="regression",
+                                operation_mode="evaluate",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                         
                         st.success("✅ Evaluation complete!")
                     
@@ -1438,6 +1691,33 @@ else:
                                 results_df[f"Prob_Class_{i}"] = results["probabilities"][:, i].round(4)
                             
                             st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_classification_score",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNClassifier",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_full),
+                                    "score_samples": len(X_score),
+                                    "random_state": random_state,
+                                    "n_classes": n_classes,
+                                },
+                                metrics={},
+                                task_type="classification",
+                                operation_mode="score",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                         
                         else:  # Regression
                             results = run_regression(X_train_full, y_train_full, X_score)
@@ -1455,6 +1735,32 @@ else:
                             results_df["Prediction"] = results["predictions"]
                             
                             st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_regression_score",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNRegressor",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_full),
+                                    "score_samples": len(X_score),
+                                    "random_state": random_state,
+                                },
+                                metrics={},
+                                task_type="regression",
+                                operation_mode="score",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                         
                         st.success("✅ Scoring complete!")
                         
