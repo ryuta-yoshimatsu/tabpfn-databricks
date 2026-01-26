@@ -10,21 +10,22 @@ import pandas as pd
 import numpy as np
 from databricks import sql
 from databricks.sdk.core import Config
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
     roc_auc_score,
     mean_squared_error,
     mean_absolute_error,
     r2_score,
+    classification_report,
+    confusion_matrix,
 )
 import tabpfn_client
 from tabpfn_client import TabPFNClassifier, TabPFNRegressor
 import matplotlib.pyplot as plt
+import mlflow
 import os
+from datetime import datetime
 
-# Prior Labs logo as base64
-PRIOR_LABS_LOGO = "data:image/png;base64,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"
 
 # Page configuration
 st.set_page_config(
@@ -159,6 +160,11 @@ st.markdown("""
         box-shadow: 0 8px 32px rgba(79, 172, 254, 0.25);
     }
     
+    .metric-card-green {
+        background: linear-gradient(135deg, #00b894 0%, #00d4aa 100%);
+        box-shadow: 0 8px 32px rgba(0, 184, 148, 0.25);
+    }
+    
     .metric-number {
         font-size: 3rem;
         font-weight: 800;
@@ -269,10 +275,11 @@ st.markdown("""
         font-weight: 600;
     }
     
-    .badge-demand { background: rgba(102, 126, 234, 0.15); color: #4a5fd9 !important; }
-    .badge-supply { background: rgba(240, 147, 251, 0.15); color: #c044a0 !important; }
-    .badge-production { background: rgba(79, 172, 254, 0.15); color: #3498db !important; }
-    .badge-distribution { background: rgba(0, 212, 170, 0.15); color: #00a885 !important; }
+    .badge-evaluate { background: rgba(0, 184, 148, 0.15); color: #00a885 !important; }
+    .badge-score { background: rgba(102, 126, 234, 0.15); color: #4a5fd9 !important; }
+    .badge-classification { background: rgba(240, 147, 251, 0.15); color: #c044a0 !important; }
+    .badge-regression { background: rgba(79, 172, 254, 0.15); color: #3498db !important; }
+    .badge-forecast { background: rgba(255, 193, 7, 0.15); color: #f39c12 !important; }
     
     /* Powered by section */
     .powered-by {
@@ -388,6 +395,27 @@ st.markdown("""
         border-radius: 10px !important;
         color: #2d2d44 !important;
     }
+    
+    /* Mode selector styling */
+    .mode-card {
+        background: #ffffff;
+        border: 2px solid rgba(102, 126, 234, 0.15);
+        border-radius: 12px;
+        padding: 1rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .mode-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
+    }
+    
+    .mode-card-active {
+        border-color: #667eea;
+        background: rgba(102, 126, 234, 0.05);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -397,105 +425,6 @@ cfg = Config()
 # Dataset configurations
 CATALOG = "tabpfn_databricks"
 SCHEMA = "default"
-
-AVAILABLE_DATASETS = {
-    "Demand Forecasting (Time Series)": {
-        "table": f"{CATALOG}.{SCHEMA}.demand_forecast",
-        "task": "forecasting",
-        "description": "Forecast product demand by category and region using lag features",
-        "default_target": "demand_units",
-        "series_id_col": "series_id",
-        "date_col": "date",
-        "exclude_cols": ["series_id", "date", "category", "region"],
-        "planning_process": "Demand Planning",
-        "business_context": """**Business Value**: Drive inventory planning, production scheduling, and distribution requirements with accurate demand forecasts."""
-    },
-    "Price Elasticity (Regression)": {
-        "table": f"{CATALOG}.{SCHEMA}.price_elasticity",
-        "task": "regression",
-        "description": "Predict price elasticity of demand for pricing optimization",
-        "default_target": "price_elasticity",
-        "exclude_cols": [],
-        "planning_process": "Demand Planning",
-        "business_context": """**Business Value**: Optimize pricing strategies by understanding how price changes affect demand for different products and markets."""
-    },
-    "Promotion Lift (Regression)": {
-        "table": f"{CATALOG}.{SCHEMA}.promotion_lift",
-        "task": "regression",
-        "description": "Predict promotional sales lift for trade promotion planning",
-        "default_target": "promotion_lift_pct",
-        "exclude_cols": [],
-        "planning_process": "Demand Planning",
-        "business_context": """**Business Value**: Plan promotions with accurate ROI forecasts to optimize trade spend and inventory planning."""
-    },
-    "Supplier Delay Risk (Classification)": {
-        "table": f"{CATALOG}.{SCHEMA}.supplier_delay_risk",
-        "task": "classification",
-        "description": "Predict which supplier deliveries will be delayed",
-        "default_target": "is_delayed",
-        "target_names": ["On-Time", "Delayed"],
-        "exclude_cols": [],
-        "planning_process": "Supply Planning",
-        "business_context": """**Business Value**: Enable proactive supply risk mitigation by identifying high-risk deliveries before they impact production."""
-    },
-    "Supplier Lead Time (Regression)": {
-        "table": f"{CATALOG}.{SCHEMA}.supplier_lead_time",
-        "task": "regression",
-        "description": "Predict actual supplier delivery lead times for planning accuracy",
-        "default_target": "actual_lead_time_days",
-        "exclude_cols": [],
-        "planning_process": "Supply Planning",
-        "business_context": """**Business Value**: Improve planning accuracy by predicting actual lead times vs. contracted times, reducing stockouts and expediting costs."""
-    },
-    "Material Shortage (Multi-class)": {
-        "table": f"{CATALOG}.{SCHEMA}.material_shortage",
-        "task": "classification",
-        "description": "Predict material shortage risk levels (No Risk, At Risk, Critical)",
-        "default_target": "shortage_risk",
-        "target_names": ["No Risk", "At Risk", "Critical"],
-        "exclude_cols": [],
-        "planning_process": "Supply Planning",
-        "business_context": """**Business Value**: Prioritize procurement actions based on shortage risk levels to prevent stockouts and production disruptions."""
-    },
-    "Labor Shortage (Multi-class)": {
-        "table": f"{CATALOG}.{SCHEMA}.labor_shortage",
-        "task": "classification",
-        "description": "Predict labor shortage risk at facilities (Adequate, At Risk, Critical)",
-        "default_target": "labor_shortage_risk",
-        "target_names": ["Adequate", "At Risk", "Critical"],
-        "exclude_cols": [],
-        "planning_process": "Production Planning",
-        "business_context": """**Business Value**: Anticipate workforce availability issues to enable proactive overtime scheduling, temp staffing, and cross-training."""
-    },
-    "Yield Prediction (Regression)": {
-        "table": f"{CATALOG}.{SCHEMA}.yield_prediction",
-        "task": "regression",
-        "description": "Predict production yield percentage for capacity planning",
-        "default_target": "yield_percentage",
-        "exclude_cols": [],
-        "planning_process": "Production Planning",
-        "business_context": """**Business Value**: Optimize capacity planning and raw material requirements by accurately predicting production output yield."""
-    },
-    "Transportation Lead Time (Regression)": {
-        "table": f"{CATALOG}.{SCHEMA}.transportation_lead_time",
-        "task": "regression",
-        "description": "Predict shipment transit times for delivery planning",
-        "default_target": "actual_transit_days",
-        "exclude_cols": [],
-        "planning_process": "Distribution Planning",
-        "business_context": """**Business Value**: Improve delivery promises and warehouse planning by accurately predicting actual transit times."""
-    },
-    "OTIF Risk (Multi-class)": {
-        "table": f"{CATALOG}.{SCHEMA}.otif_risk",
-        "task": "classification",
-        "description": "Predict On-Time-In-Full delivery risk (Low, Medium, High Risk)",
-        "default_target": "otif_risk",
-        "target_names": ["Low Risk", "Medium Risk", "High Risk"],
-        "exclude_cols": [],
-        "planning_process": "Distribution Planning",
-        "business_context": """**Business Value**: Proactively identify orders at risk of OTIF failure to enable intervention and improve customer satisfaction."""
-    },
-}
 
 
 @st.cache_resource(ttl=300, show_spinner="Connecting to Databricks...")
@@ -514,6 +443,16 @@ def load_table(_conn, table_name: str) -> pd.DataFrame:
         return cursor.fetchall_arrow().to_pandas()
 
 
+@st.cache_data(ttl=600, show_spinner="Fetching available tables...")
+def get_available_tables(_conn, catalog: str, schema: str) -> list:
+    """Get list of all tables in the schema."""
+    with _conn.cursor() as cursor:
+        cursor.execute(f"SHOW TABLES IN {catalog}.{schema}")
+        result = cursor.fetchall()
+        tables = [row[1] for row in result]  # tableName is typically the second column
+        return sorted(tables)
+
+
 def authenticate_tabpfn():
     token = os.environ.get("TABPFN_TOKEN")
     if token:
@@ -522,46 +461,83 @@ def authenticate_tabpfn():
     return False
 
 
-def prepare_features(df: pd.DataFrame, target_col: str, exclude_cols: list = None):
-    exclude = set(exclude_cols or [])
-    exclude.add(target_col)
-    feature_cols = [c for c in df.columns if c not in exclude]
+def prepare_features(df: pd.DataFrame, feature_cols: list, target_col: str = None):
+    """Prepare features for modeling."""
+    # Get categorical columns
     cat_cols = df[feature_cols].select_dtypes(include=['object', 'category']).columns.tolist()
+    
     if cat_cols:
         df_encoded = pd.get_dummies(df[feature_cols], columns=cat_cols, drop_first=True)
     else:
         df_encoded = df[feature_cols].copy()
-    return df_encoded.values, df[target_col].values, df_encoded.columns.tolist()
+    
+    X = df_encoded.values
+    y = df[target_col].values if target_col else None
+    
+    return X, y, df_encoded.columns.tolist()
 
 
-def run_classification(X_train, X_test, y_train, y_test, target_names=None):
+def run_classification(X_train, y_train, X_test=None, y_test=None):
+    """Run classification with TabPFN."""
     clf = TabPFNClassifier()
     clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-    y_pred_proba = clf.predict_proba(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    n_classes = len(np.unique(y_test))
-    if n_classes == 2:
-        roc_auc = roc_auc_score(y_test, y_pred_proba[:, 1])
-    else:
-        try:
-            roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr", average="weighted")
-        except ValueError:
-            roc_auc = None
-    return {"predictions": y_pred, "probabilities": y_pred_proba, "accuracy": accuracy, "roc_auc": roc_auc, "y_test": y_test, "model": clf}
+    
+    if X_test is not None:
+        y_pred = clf.predict(X_test)
+        y_pred_proba = clf.predict_proba(X_test)
+        
+        results = {
+            "predictions": y_pred,
+            "probabilities": y_pred_proba,
+            "model": clf
+        }
+        
+        if y_test is not None:
+            accuracy = accuracy_score(y_test, y_pred)
+            n_classes = len(np.unique(y_train))
+            if n_classes == 2:
+                roc_auc = roc_auc_score(y_test, y_pred_proba[:, 1])
+            else:
+                try:
+                    roc_auc = roc_auc_score(y_test, y_pred_proba, multi_class="ovr", average="weighted")
+                except ValueError:
+                    roc_auc = None
+            results["accuracy"] = accuracy
+            results["roc_auc"] = roc_auc
+            results["y_test"] = y_test
+        
+        return results
+    return {"model": clf}
 
 
-def run_regression(X_train, X_test, y_train, y_test):
+def run_regression(X_train, y_train, X_test=None, y_test=None):
+    """Run regression with TabPFN."""
     reg = TabPFNRegressor()
     reg.fit(X_train, y_train)
-    y_pred = reg.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    return {"predictions": y_pred, "rmse": rmse, "mae": mae, "r2": r2, "y_test": y_test, "model": reg}
+    
+    if X_test is not None:
+        y_pred = reg.predict(X_test)
+        
+        results = {
+            "predictions": y_pred,
+            "model": reg
+        }
+        
+        if y_test is not None:
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mae = mean_absolute_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+            results["rmse"] = rmse
+            results["mae"] = mae
+            results["r2"] = r2
+            results["y_test"] = y_test
+        
+        return results
+    return {"model": reg}
 
 
 def create_lag_features(series: np.ndarray, n_lags: int = 12):
+    """Create lag features for time series forecasting."""
     X, y = [], []
     for i in range(n_lags, len(series)):
         X.append(series[i-n_lags:i])
@@ -570,6 +546,7 @@ def create_lag_features(series: np.ndarray, n_lags: int = 12):
 
 
 def add_calendar_features(X: np.ndarray, dates, n_lags: int):
+    """Add calendar features to lag features."""
     dates_subset = pd.to_datetime(dates[n_lags:])
     months = np.array([d.month for d in dates_subset])
     years = np.array([d.year for d in dates_subset])
@@ -578,36 +555,181 @@ def add_calendar_features(X: np.ndarray, dates, n_lags: int):
     return np.column_stack([X, month_sin, month_cos, years - years.min()])
 
 
-def run_forecasting(X_train, X_test, y_train, y_test):
+def run_forecasting(X_train, y_train, X_test=None, y_test=None):
+    """Run time series forecasting with TabPFN."""
     reg = TabPFNRegressor()
     reg.fit(X_train, y_train)
-    y_pred = reg.predict(X_test)
-    mae = mean_absolute_error(y_test, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1e-8))) * 100
-    try:
-        y_lower = reg.predict(X_test, output_type="quantiles", quantiles=[0.1]).flatten()
-        y_upper = reg.predict(X_test, output_type="quantiles", quantiles=[0.9]).flatten()
-        coverage = np.mean((y_test >= y_lower) & (y_test <= y_upper))
-    except Exception:
-        y_lower, y_upper, coverage = None, None, None
-    return {"predictions": y_pred, "y_lower": y_lower, "y_upper": y_upper, "mae": mae, "rmse": rmse, "mape": mape, "coverage": coverage, "y_test": y_test, "model": reg}
+    
+    if X_test is not None:
+        y_pred = reg.predict(X_test)
+        
+        results = {
+            "predictions": y_pred,
+            "model": reg
+        }
+        
+        # Try to get prediction intervals
+        try:
+            y_lower = reg.predict(X_test, output_type="quantiles", quantiles=[0.1]).flatten()
+            y_upper = reg.predict(X_test, output_type="quantiles", quantiles=[0.9]).flatten()
+            results["y_lower"] = y_lower
+            results["y_upper"] = y_upper
+        except Exception:
+            results["y_lower"] = None
+            results["y_upper"] = None
+        
+        if y_test is not None:
+            mae = mean_absolute_error(y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+            mape = np.mean(np.abs((y_test - y_pred) / (y_test + 1e-8))) * 100
+            results["mae"] = mae
+            results["rmse"] = rmse
+            results["mape"] = mape
+            results["y_test"] = y_test
+            
+            if results["y_lower"] is not None:
+                coverage = np.mean((y_test >= results["y_lower"]) & (y_test <= results["y_upper"]))
+                results["coverage"] = coverage
+        
+        return results
+    return {"model": reg}
 
 
 # Environment variables
 http_path = os.environ.get("DATABRICKS_HTTP_PATH", "")
 tabpfn_token = os.environ.get("TABPFN_TOKEN", "")
 
+
+def setup_mlflow_experiment(conn):
+    """Set up MLflow experiment using the same naming convention as notebooks."""
+    error_details = []
+    
+    try:
+        # Set MLflow tracking URI to Databricks workspace
+        mlflow.set_tracking_uri("databricks")
+        
+        # Get current user from Databricks SQL
+        cursor = conn.cursor()
+        cursor.execute("SELECT current_user()")
+        current_user = cursor.fetchone()[0]
+        cursor.close()
+        
+        experiment_name = f"/Users/{current_user}/tabpfn-databricks"
+        
+        # Try to get or create the experiment
+        try:
+            experiment = mlflow.get_experiment_by_name(experiment_name)
+            if experiment is None:
+                experiment_id = mlflow.create_experiment(experiment_name)
+                experiment = mlflow.get_experiment(experiment_id)
+            else:
+                experiment_id = experiment.experiment_id
+        except Exception as exp_error:
+            # If get/create fails, try set_experiment as fallback
+            error_details.append(f"get/create experiment: {exp_error}")
+            experiment = mlflow.set_experiment(experiment_name)
+            experiment_id = experiment.experiment_id
+        
+        # Set the experiment as active
+        mlflow.set_experiment(experiment_name)
+        
+        # Get workspace host for constructing URLs
+        workspace_host = cfg.host
+        
+        return {
+            "experiment_name": experiment_name,
+            "experiment_id": experiment_id,
+            "workspace_host": workspace_host,
+            "current_user": current_user,
+        }, None
+    except Exception as e:
+        error_details.append(f"primary setup: {e}")
+        # Fallback experiment name
+        experiment_name = "/Shared/tabpfn-databricks-app"
+        try:
+            mlflow.set_tracking_uri("databricks")
+            experiment = mlflow.set_experiment(experiment_name)
+            experiment_id = experiment.experiment_id
+            workspace_host = cfg.host
+            return {
+                "experiment_name": experiment_name,
+                "experiment_id": experiment_id,
+                "workspace_host": workspace_host,
+                "current_user": "shared",
+                "fallback": True,
+                "error_details": "; ".join(error_details),
+            }, None
+        except Exception as e2:
+            error_details.append(f"fallback setup: {e2}")
+            return None, "; ".join(error_details)
+
+
+def log_to_mlflow(run_name, params, metrics, task_type, operation_mode, mlflow_config=None):
+    """Log evaluation or scoring run to MLflow."""
+    try:
+        # Ensure we're using the correct experiment
+        if mlflow_config and mlflow_config.get('experiment_name'):
+            mlflow.set_experiment(mlflow_config['experiment_name'])
+        
+        with mlflow.start_run(run_name=run_name):
+            # Log common parameters
+            mlflow.log_param("source", "streamlit_app")
+            mlflow.log_param("task_type", task_type)
+            mlflow.log_param("operation_mode", operation_mode)
+            mlflow.log_param("timestamp", datetime.now().isoformat())
+            
+            # Log custom parameters
+            for key, value in params.items():
+                try:
+                    mlflow.log_param(key, value)
+                except Exception:
+                    pass
+            
+            # Log metrics
+            for key, value in metrics.items():
+                try:
+                    if value is not None and not np.isnan(value):
+                        mlflow.log_metric(key, float(value))
+                except Exception:
+                    pass
+            
+            run_id = mlflow.active_run().info.run_id
+            
+            # Construct run URL if config is available
+            run_url = None
+            if mlflow_config:
+                workspace_host = mlflow_config.get("workspace_host", "")
+                experiment_id = mlflow_config.get("experiment_id", "")
+                if workspace_host and experiment_id:
+                    # Remove protocol if already present in host
+                    if workspace_host.startswith("https://"):
+                        base_url = workspace_host
+                    elif workspace_host.startswith("http://"):
+                        base_url = workspace_host
+                    else:
+                        base_url = f"https://{workspace_host}"
+                    run_url = f"{base_url}/#mlflow/experiments/{experiment_id}/runs/{run_id}"
+            
+            return run_id, run_url, None
+    except Exception as e:
+        return None, None, str(e)
+
 # ============================================================================
 # SIDEBAR
 # ============================================================================
 with st.sidebar:
-    # Logos
-    # Databricks logo as inline SVG (red/orange geometric icon)
+    # Databricks logo as inline SVG
     databricks_icon = '''<svg width="50" height="50" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
         <path d="M50 10L90 30V50L50 70L10 50V30L50 10Z" fill="#FF3621"/>
         <path d="M50 30L90 50V70L50 90L10 70V50L50 30Z" fill="#FF3621" opacity="0.7"/>
         <path d="M50 10L90 30L50 50L10 30L50 10Z" fill="#FF6B4A"/>
+    </svg>'''
+    
+    # Prior Labs logo as inline SVG (stylized "P" with text)
+    prior_labs_icon = '''<svg width="120" height="40" viewBox="0 0 120 40" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="5" width="30" height="30" rx="6" fill="#667eea"/>
+        <text x="10" y="28" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="white">P</text>
+        <text x="38" y="26" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="600" fill="#1a1a2e">Prior Labs</text>
     </svg>'''
     
     st.markdown(f"""
@@ -617,14 +739,18 @@ with st.sidebar:
             <div style="font-family: 'Inter', sans-serif; font-size: 1.1rem; font-weight: 600; color: #1a1a2e; letter-spacing: -0.5px;">databricks</div>
         </div>
         <div style="color: #8888aa; font-size: 1.5rem; font-weight: 300; margin: 0.5rem 0;">×</div>
-        <img src="{PRIOR_LABS_LOGO}" height="40" alt="Prior Labs" style="margin-top: 0.5rem;">
+        <div style="margin-top: 0.5rem;">
+            {prior_labs_icon}
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
-    # Navigation
-    page = st.radio("Navigation", ["🏠 Home", "⚡ Predictions"], label_visibility="collapsed")
+    # Navigation - use session state to determine initial selection
+    nav_options = ["🏠 Home", "⚡ Predictions"]
+    current_index = 0 if st.session_state.current_page == "home" else 1
+    page = st.radio("Navigation", nav_options, index=current_index, label_visibility="collapsed")
     st.session_state.current_page = "home" if page == "🏠 Home" else "predictions"
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -655,13 +781,20 @@ with st.sidebar:
 # ============================================================================
 if st.session_state.current_page == "home":
     
+    # Prior Labs logo SVG for hero (white version)
+    prior_labs_hero = '''<svg width="140" height="45" viewBox="0 0 140 45" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="5" width="35" height="35" rx="7" fill="#667eea"/>
+        <text x="11" y="32" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" fill="white">P</text>
+        <text x="44" y="30" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600" fill="white">Prior Labs</text>
+    </svg>'''
+    
     # Hero Section
     st.markdown(f"""
     <div class="hero-container">
         <div class="logo-container">
             <img src="https://www.databricks.com/wp-content/uploads/2022/06/db-nav-logo.svg" width="150" alt="Databricks">
             <span class="logo-divider">×</span>
-            <img src="{PRIOR_LABS_LOGO}" height="45" alt="Prior Labs">
+            {prior_labs_hero}
         </div>
         <h1 class="hero-title">Predictive Planning Hub</h1>
         <p class="hero-subtitle">
@@ -672,50 +805,57 @@ if st.session_state.current_page == "home":
     """, unsafe_allow_html=True)
     
     # Metrics
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="metric-card"><div class="metric-number">1</div><div class="metric-label">Foundation Model</div></div>', unsafe_allow_html=True)
     with col2:
-        st.markdown('<div class="metric-card metric-card-pink"><div class="metric-number">4</div><div class="metric-label">Planning Processes</div></div>', unsafe_allow_html=True)
-    with col3:
-        st.markdown('<div class="metric-card metric-card-cyan"><div class="metric-number">10</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="metric-card metric-card-green"><div class="metric-number">∞</div><div class="metric-label">Use Cases</div></div>', unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Why section
-    st.markdown('<div class="section-header">Why a Centralized Analytics Hub?</div>', unsafe_allow_html=True)
+    # How it works section
+    st.markdown('<div class="section-header">How It Works</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown('<div class="feature-card"><div class="feature-title">1️⃣ Select Dataset</div><div class="feature-text">Browse all available tables in your schema and select one for prediction.</div></div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown('<div class="feature-card"><div class="feature-title">2️⃣ Choose Mode</div><div class="feature-text">Select prediction type: Classification, Regression, or Time Series Forecast.</div></div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown('<div class="feature-card"><div class="feature-title">3️⃣ Configure</div><div class="feature-text">Specify feature columns and target/label column for your model.</div></div>', unsafe_allow_html=True)
+    with col4:
+        st.markdown('<div class="feature-card"><div class="feature-title">4️⃣ Execute</div><div class="feature-text">Run evaluation (with metrics) or scoring (predictions only).</div></div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
+    # Operation Modes
+    st.markdown('<div class="section-header">Operation Modes</div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown('<div class="feature-card"><div class="feature-title">🔄 Model Proliferation</div><div class="feature-text">Traditional approaches require dozens or hundreds of models to maintain across the planning value chain.</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="feature-card"><div class="feature-title">🔧 High Maintenance</div><div class="feature-text">Continuous retraining, monitoring, and updates consume valuable data science resources.</div></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="feature-card" style="border-left: 4px solid #00b894;">
+            <div class="feature-title">📊 Evaluate Mode</div>
+            <div class="feature-text">
+                <strong>Uses: _train datasets</strong><br><br>
+                Train on a portion of the data, predict on the rest, and evaluate performance against known labels. 
+                Get accuracy, ROC AUC, RMSE, R², and other metrics to validate model performance.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     with col2:
-        st.markdown('<div class="feature-card"><div class="feature-title">📊 Inconsistent Approaches</div><div class="feature-text">Different teams using different tools and methods leads to fragmented insights.</div></div>', unsafe_allow_html=True)
-        st.markdown('<div class="feature-card"><div class="feature-title">🚧 Siloed Insights</div><div class="feature-text">Disconnected predictions that don\'t flow across the value chain limit business impact.</div></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div class="feature-card" style="border-left: 4px solid #667eea;">
+            <div class="feature-title">🎯 Score Mode</div>
+            <div class="feature-text">
+                <strong>Uses: _score datasets</strong><br><br>
+                Train on the full _train dataset, then generate predictions on the _score dataset. 
+                Use this for production scoring where you need predictions on new, unseen data.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.markdown('<div class="info-box"><div class="info-box-text"><strong>This platform solves these challenges</strong> by providing a single entry point for all predictive model use cases, powered by <strong>TabPFN</strong> — a foundation model that works out-of-the-box on any tabular prediction task without training or tuning.</div></div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Value Chain
-    st.markdown('<div class="section-header">End-to-End Planning Value Chain</div>', unsafe_allow_html=True)
-    
-    vc1, vc2, vc3, vc4 = st.columns(4)
-    with vc1:
-        st.markdown('<div class="process-card process-card-demand"><div class="process-title process-title-demand">📈 Demand Planning</div><hr style="border-color: rgba(102, 126, 234, 0.2);"><p class="process-item">• Demand Forecasting</p><p class="process-item">• Price Elasticity</p><p class="process-item">• Promotion Lift</p></div>', unsafe_allow_html=True)
-    with vc2:
-        st.markdown('<div class="process-card process-card-supply"><div class="process-title process-title-supply">🚚 Supply Planning</div><hr style="border-color: rgba(240, 147, 251, 0.2);"><p class="process-item">• Supplier Delay Risk</p><p class="process-item">• Supplier Lead Time</p><p class="process-item">• Material Shortage</p></div>', unsafe_allow_html=True)
-    with vc3:
-        st.markdown('<div class="process-card process-card-production"><div class="process-title process-title-production">🏭 Production Planning</div><hr style="border-color: rgba(79, 172, 254, 0.2);"><p class="process-item">• Labor Shortage</p><p class="process-item">• Yield Prediction</p></div>', unsafe_allow_html=True)
-    with vc4:
-        st.markdown('<div class="process-card process-card-distribution"><div class="process-title process-title-distribution">📦 Distribution</div><hr style="border-color: rgba(0, 212, 170, 0.2);"><p class="process-item">• Transportation Lead Time</p><p class="process-item">• OTIF Risk</p></div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-    
-    # Use Cases Table
-    st.markdown('<div class="section-header">Available Use Cases</div>', unsafe_allow_html=True)
-    use_cases_data = [{"Use Case": name.split(" (")[0], "Task Type": config["task"].capitalize() if "Multi-class" not in name else "Multi-class", "Planning Process": config.get("planning_process", ""), "Description": config["description"]} for name, config in AVAILABLE_DATASETS.items()]
-    st.dataframe(pd.DataFrame(use_cases_data), use_container_width=True, hide_index=True)
+    st.markdown('<div class="info-box"><div class="info-box-text"><strong>Data Split Convention:</strong> Datasets are pre-split into <code>*_train</code> (80%) and <code>*_score</code> (20%) tables. Evaluate mode uses only the _train table with internal cross-validation. Score mode trains on _train and predicts on _score.</div></div>', unsafe_allow_html=True)
     
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
     
@@ -737,7 +877,12 @@ if st.session_state.current_page == "home":
         - ✅ **Published in Nature** — Rigorous scientific validation
         """)
     with col2:
-        st.markdown(f'<div class="powered-by"><div class="powered-by-title">Powered by</div><img src="{PRIOR_LABS_LOGO}" height="50" alt="Prior Labs" style="margin: 0.75rem 0;"><div class="powered-by-desc">Foundation Model for Tabular Data</div></div>', unsafe_allow_html=True)
+        prior_labs_powered = '''<svg width="140" height="45" viewBox="0 0 140 45" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="5" width="35" height="35" rx="7" fill="#667eea"/>
+            <text x="11" y="32" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" fill="white">P</text>
+            <text x="44" y="30" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="600" fill="#1a1a2e">Prior Labs</text>
+        </svg>'''
+        st.markdown(f'<div class="powered-by"><div class="powered-by-title">Powered by</div><div style="margin: 0.75rem 0;">{prior_labs_powered}</div><div class="powered-by-desc">Foundation Model for Tabular Data</div></div>', unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
@@ -754,25 +899,9 @@ if st.session_state.current_page == "home":
 # PREDICTIONS PAGE
 # ============================================================================
 else:
-    st.markdown('<div class="section-header" style="margin-top: 0;">⚡ Planning Predictions</div>', unsafe_allow_html=True)
-    st.markdown("Select a use case from the dropdown below to run predictions with TabPFN.")
+    st.markdown('<div class="section-header" style="margin-top: 0;">⚡ Predictions</div>', unsafe_allow_html=True)
     
-    selected_dataset_name = st.selectbox("Select Planning Use Case", options=list(AVAILABLE_DATASETS.keys()))
-    selected_dataset = AVAILABLE_DATASETS[selected_dataset_name]
-    
-    # Badge
-    process = selected_dataset.get("planning_process", "")
-    badge_class = {"Demand Planning": "badge-demand", "Supply Planning": "badge-supply", "Production Planning": "badge-production", "Distribution Planning": "badge-distribution"}.get(process, "badge-demand")
-    
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        st.markdown(f'<span class="badge {badge_class}">{process}</span>', unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"*{selected_dataset['description']}*")
-    
-    st.markdown(selected_dataset["business_context"])
-    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
-
+    # Check connections
     if not http_path or http_path.startswith("YOUR_"):
         st.error("⚠️ SQL Warehouse not configured. Edit `app.yaml` to set `DATABRICKS_HTTP_PATH`.")
         st.stop()
@@ -780,145 +909,870 @@ else:
     if not authenticate_tabpfn():
         st.error("⚠️ TabPFN token not configured. Edit `app.yaml` to set `TABPFN_TOKEN`.")
         st.stop()
-
+    
     try:
         conn = get_connection(http_path)
-        st.markdown(f'<div class="section-header">📊 {selected_dataset_name}</div>', unsafe_allow_html=True)
-
-        with st.spinner(f"Loading {selected_dataset['table']}..."):
-            df = load_table(conn, selected_dataset["table"])
-
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Rows", f"{df.shape[0]:,}")
-        with col2:
-            if selected_dataset["task"] == "forecasting":
-                st.metric("Time Series", df[selected_dataset["series_id_col"]].nunique())
-            else:
-                st.metric("Features", df.shape[1] - 1)
-        with col3:
-            st.metric("Task Type", selected_dataset["task"].capitalize())
-        with col4:
-            if selected_dataset["task"] == "classification":
-                st.metric("Classes", df[selected_dataset["default_target"]].nunique())
-            elif selected_dataset["task"] == "forecasting":
-                df[selected_dataset["date_col"]] = pd.to_datetime(df[selected_dataset["date_col"]])
-                st.metric("Time Range", f"{df[selected_dataset['date_col']].min().strftime('%Y-%m')} to {df[selected_dataset['date_col']].max().strftime('%Y-%m')}")
-            else:
-                st.metric("Target Range", f"{df[selected_dataset['default_target']].max() - df[selected_dataset['default_target']].min():.2f}")
-
-        target_column = selected_dataset["default_target"]
-
-        with st.expander("📋 Data Preview", expanded=False):
-            st.dataframe(df.head(20), use_container_width=True)
-
-        st.markdown('<div class="section-header">🔧 Model Configuration</div>', unsafe_allow_html=True)
         
-        if selected_dataset["task"] == "forecasting":
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_series = st.selectbox("Select Time Series", options=df[selected_dataset["series_id_col"]].unique().tolist())
-            with col2:
-                n_lags = st.slider("Number of Lag Features", 3, 24, 12)
-            col3, col4 = st.columns(2)
-            with col3:
-                forecast_horizon = st.slider("Forecast Horizon", 1, 12, 6)
-            with col4:
-                random_state = st.number_input("Random Seed", 0, 9999, 42)
-            test_size, max_samples = None, None
+        # Set up MLflow experiment (same as notebooks)
+        mlflow_config, mlflow_error = setup_mlflow_experiment(conn)
+        if mlflow_config:
+            st.sidebar.markdown(f"**MLflow Experiment:**")
+            st.sidebar.code(mlflow_config['experiment_name'], language=None)
+            if mlflow_config.get('fallback'):
+                st.sidebar.warning(f"Using fallback experiment. Error: {mlflow_config.get('error_details', 'unknown')}")
+        elif mlflow_error:
+            st.sidebar.warning(f"MLflow setup failed: {mlflow_error}")
+        
+        # ====================================================================
+        # STEP 1: Select Dataset
+        # ====================================================================
+        st.markdown("### 1️⃣ Select Dataset")
+        
+        # Get available tables
+        all_tables = get_available_tables(conn, CATALOG, SCHEMA)
+        
+        # Filter to show only base table names (without _train/_score suffix for display)
+        base_tables = set()
+        for t in all_tables:
+            if t.endswith("_train"):
+                base_tables.add(t[:-6])  # Remove _train suffix
+            elif t.endswith("_score"):
+                base_tables.add(t[:-6])  # Remove _score suffix
+            else:
+                base_tables.add(t)
+        
+        base_tables = sorted(list(base_tables))
+        
+        if not base_tables:
+            st.warning("No tables found in the schema. Please run the data preparation notebook first.")
+            st.stop()
+        
+        selected_base_table = st.selectbox(
+            "Select a dataset",
+            options=base_tables,
+            help="Choose a dataset for prediction. The system will automatically use _train for evaluation and _score for scoring."
+        )
+        
+        # Check if train/score versions exist
+        train_table = f"{selected_base_table}_train"
+        score_table = f"{selected_base_table}_score"
+        has_train = train_table in all_tables
+        has_score = score_table in all_tables
+        
+        if has_train:
+            st.success(f"✓ Found `{train_table}` and `{score_table}` tables")
         else:
+            st.warning(f"⚠️ No _train/_score split found. Using `{selected_base_table}` directly.")
+            train_table = selected_base_table
+            score_table = selected_base_table
+        
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+        
+        # ====================================================================
+        # STEP 2: Choose Mode
+        # ====================================================================
+        st.markdown("### 2️⃣ Choose Prediction Mode")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            prediction_mode = st.radio(
+                "Prediction Type",
+                ["Classification", "Regression", "Forecast"],
+                help="Classification for categorical targets, Regression for continuous targets, Forecast for time series"
+            )
+        
+        with col2:
+            operation_mode = st.radio(
+                "Operation Mode",
+                ["Evaluate", "Score"],
+                help="Evaluate: test model on _train data with metrics. Score: generate predictions on _score data."
+            )
+        
+        with col3:
+            st.markdown(f"""
+            <div style="padding: 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 10px; margin-top: 0.5rem;">
+                <strong>Selected:</strong><br>
+                <span class="badge badge-{prediction_mode.lower()}">{prediction_mode}</span>
+                <span class="badge badge-{operation_mode.lower()}">{operation_mode}</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+        
+        # ====================================================================
+        # STEP 3: Load Data & Configure Columns
+        # ====================================================================
+        st.markdown("### 3️⃣ Configure Features & Target")
+        
+        # Load the training data for column selection
+        with st.spinner(f"Loading {train_table}..."):
+            df_train = load_table(conn, f"{CATALOG}.{SCHEMA}.{train_table}")
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.metric("Training Rows", f"{len(df_train):,}")
+        with col2:
+            st.metric("Columns", f"{len(df_train.columns)}")
+        
+        with st.expander("📋 Data Preview", expanded=False):
+            st.dataframe(df_train.head(20), use_container_width=True)
+        
+        # Column configuration
+        all_columns = df_train.columns.tolist()
+        
+        # Identify numeric and categorical columns
+        numeric_cols = df_train.select_dtypes(include=[np.number]).columns.tolist()
+        categorical_cols = df_train.select_dtypes(include=['object', 'category']).columns.tolist()
+        datetime_cols = df_train.select_dtypes(include=['datetime64']).columns.tolist()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Target column selection
+            target_col = st.selectbox(
+                "Target/Label Column",
+                options=all_columns,
+                index=len(all_columns) - 1 if all_columns else 0,
+                help="The column you want to predict"
+            )
+            
+            if prediction_mode == "Forecast":
+                # Additional columns for time series
+                date_col = st.selectbox(
+                    "Date Column",
+                    options=datetime_cols + [c for c in all_columns if 'date' in c.lower()],
+                    help="Column containing timestamps"
+                )
+                
+                series_id_col = st.selectbox(
+                    "Series ID Column (optional)",
+                    options=["None"] + categorical_cols,
+                    help="Column identifying different time series (e.g., product_id, region)"
+                )
+                if series_id_col == "None":
+                    series_id_col = None
+        
+        with col2:
+            # Feature columns selection
+            default_features = [c for c in all_columns if c != target_col]
+            
+            if prediction_mode == "Forecast":
+                # For forecasting, exclude date and series_id from features
+                exclude_from_features = [target_col, date_col]
+                if series_id_col:
+                    exclude_from_features.append(series_id_col)
+                default_features = [c for c in all_columns if c not in exclude_from_features]
+            
+            feature_cols = st.multiselect(
+                "Feature Columns",
+                options=[c for c in all_columns if c != target_col],
+                default=default_features[:min(10, len(default_features))],  # Limit default selection
+                help="Columns to use as input features"
+            )
+        
+        if not feature_cols:
+            st.warning("Please select at least one feature column.")
+            st.stop()
+        
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+        
+        # ====================================================================
+        # STEP 4: Model Configuration
+        # ====================================================================
+        st.markdown("### 4️⃣ Model Configuration")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            random_state = st.number_input("Random Seed", 0, 9999, 42)
+        
+        with col2:
+            if operation_mode == "Evaluate":
+                test_size = st.slider("Test Set Size (%)", 10, 50, 20)
+            else:
+                test_size = None
+        
+        with col3:
+            if len(df_train) > 3000:
+                max_samples = st.slider("Max Training Samples", 500, min(5000, len(df_train)), 2000)
+            else:
+                max_samples = None
+        
+        if prediction_mode == "Forecast":
             col1, col2 = st.columns(2)
             with col1:
-                test_size = st.slider("Test Set Size (%)", 10, 50, 20)
+                n_lags = st.slider("Number of Lag Features", 3, 24, 12)
             with col2:
-                random_state = st.number_input("Random Seed", 0, 9999, 42)
-            max_samples = st.slider("Max Training Samples", 500, min(5000, len(df)), 2000) if len(df) > 3000 else None
-
-        button_label = "⚡ Run TabPFN Forecast" if selected_dataset["task"] == "forecasting" else "⚡ Run TabPFN Prediction"
+                forecast_horizon = st.slider("Forecast Horizon", 1, 12, 6)
+            
+            if series_id_col:
+                unique_series = df_train[series_id_col].unique().tolist()
+                selected_series = st.selectbox("Select Time Series", options=unique_series)
+        
+        st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+        
+        # ====================================================================
+        # RUN PREDICTION
+        # ====================================================================
+        button_label = f"⚡ Run {operation_mode}" if operation_mode == "Evaluate" else "⚡ Generate Predictions"
+        
         if st.button(button_label, type="primary", use_container_width=True):
-            with st.spinner("Running TabPFN model..."):
+            with st.spinner(f"Running TabPFN {prediction_mode.lower()}..."):
                 
-                if selected_dataset["task"] == "forecasting":
-                    df_series = df[df[selected_dataset["series_id_col"]] == selected_series].sort_values(selected_dataset["date_col"]).reset_index(drop=True)
-                    values, dates = df_series[target_column].values, df_series[selected_dataset["date_col"]].values
+                # ============================================================
+                # FORECASTING
+                # ============================================================
+                if prediction_mode == "Forecast":
+                    # Prepare time series data
+                    if series_id_col:
+                        df_series = df_train[df_train[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
+                    else:
+                        df_series = df_train.sort_values(date_col).reset_index(drop=True)
+                    
+                    values = df_series[target_col].values
+                    dates = df_series[date_col].values
+                    
                     if len(values) < n_lags + forecast_horizon + 5:
-                        st.error("Not enough data points.")
+                        st.error("Not enough data points for the selected configuration.")
                         st.stop()
+                    
+                    # Create lag features
                     X, y = create_lag_features(values, n_lags)
                     X_enhanced = add_calendar_features(X, dates, n_lags)
-                    X_train, X_test = X_enhanced[:-forecast_horizon], X_enhanced[-forecast_horizon:]
-                    y_train, y_test = y[:-forecast_horizon], y[-forecast_horizon:]
-                    test_dates = pd.to_datetime(dates[n_lags:])[-forecast_horizon:]
-                    train_dates = pd.to_datetime(dates[n_lags:])[:-forecast_horizon]
-                    results = run_forecasting(X_train, X_test, y_train, y_test)
                     
-                    st.markdown('<div class="section-header">📊 Forecast Results</div>', unsafe_allow_html=True)
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1: st.metric("MAE", f"{results['mae']:,.0f}")
-                    with col2: st.metric("RMSE", f"{results['rmse']:,.0f}")
-                    with col3: st.metric("MAPE", f"{results['mape']:.1f}%")
-                    with col4: st.metric("80% Coverage" if results['coverage'] else "Horizon", f"{results['coverage']:.0%}" if results['coverage'] else f"{forecast_horizon}")
-                    
-                    fig, ax = plt.subplots(figsize=(12, 5))
-                    fig.patch.set_facecolor('#f8f7ff')
-                    ax.set_facecolor('#f8f7ff')
-                    ax.plot(train_dates, y_train, color='#667eea', linewidth=1.5, label='Training', alpha=0.7)
-                    ax.plot(test_dates, y_test, color='#00b894', linewidth=2, marker='o', markersize=6, label='Actual')
-                    ax.plot(test_dates, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast')
-                    if results['y_lower'] is not None:
-                        ax.fill_between(test_dates, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
-                    ax.set_xlabel('Date', color='#2d2d44')
-                    ax.set_ylabel('Demand', color='#2d2d44')
-                    ax.set_title(f'Forecast - {selected_series}', color='#1a1a2e', fontweight='bold')
-                    ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
-                    ax.tick_params(colors='#4a4a6a')
-                    ax.grid(True, alpha=0.3, color='#667eea')
-                    for spine in ax.spines.values():
-                        spine.set_color('#e0e0e0')
-                    plt.xticks(rotation=45)
-                    plt.tight_layout()
-                    st.pyplot(fig)
-                    
-                    results_df = pd.DataFrame({"Date": test_dates.strftime('%Y-%m'), "Actual": y_test.round(0).astype(int), "Forecast": results['predictions'].round(0).astype(int), "Error": (y_test - results['predictions']).round(0).astype(int)})
-                    st.dataframe(results_df, use_container_width=True)
-                    st.success("✅ Forecast complete!")
-                
-                else:
-                    X, y, _ = prepare_features(df, target_column, selected_dataset.get("exclude_cols", []))
-                    if max_samples and len(X) > max_samples:
-                        np.random.seed(random_state)
-                        idx = np.random.choice(len(X), max_samples, replace=False)
-                        X, y = X[idx], y[idx]
-                    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size/100, random_state=random_state, stratify=y if selected_dataset["task"] == "classification" else None)
-
-                    if selected_dataset["task"] == "classification":
-                        results = run_classification(X_train, X_test, y_train, y_test, selected_dataset.get("target_names"))
-                        st.markdown('<div class="section-header">📊 Classification Results</div>', unsafe_allow_html=True)
-                        col1, col2, col3 = st.columns(3)
-                        with col1: st.metric("Accuracy", f"{results['accuracy']:.4f}")
-                        with col2:
-                            if results['roc_auc']: st.metric("ROC AUC", f"{results['roc_auc']:.4f}")
-                        with col3: st.metric("Test Samples", len(y_test))
+                    if operation_mode == "Evaluate":
+                        # Split for evaluation
+                        X_train_ts, X_test_ts = X_enhanced[:-forecast_horizon], X_enhanced[-forecast_horizon:]
+                        y_train_ts, y_test_ts = y[:-forecast_horizon], y[-forecast_horizon:]
+                        test_dates = pd.to_datetime(dates[n_lags:])[-forecast_horizon:]
+                        train_dates = pd.to_datetime(dates[n_lags:])[:-forecast_horizon]
                         
-                        results_df = pd.DataFrame({"Actual": results["y_test"], "Predicted": results["predictions"], "Correct": results["y_test"] == results["predictions"]})
-                        target_names = selected_dataset.get("target_names", [f"Class_{i}" for i in range(results["probabilities"].shape[1])])
-                        for i, name in enumerate(target_names[:results["probabilities"].shape[1]]):
-                            results_df[f"Prob_{name}"] = results["probabilities"][:, i].round(4)
-                        st.dataframe(results_df, use_container_width=True)
-                    else:
-                        results = run_regression(X_train, X_test, y_train, y_test)
-                        st.markdown('<div class="section-header">📊 Regression Results</div>', unsafe_allow_html=True)
+                        results = run_forecasting(X_train_ts, y_train_ts, X_test_ts, y_test_ts)
+                        
+                        # Display results
+                        st.markdown('<div class="section-header">📊 Forecast Evaluation Results</div>', unsafe_allow_html=True)
                         col1, col2, col3, col4 = st.columns(4)
-                        fmt = ".4f" if "elasticity" in selected_dataset_name.lower() else ".2f"
-                        with col1: st.metric("RMSE", f"{results['rmse']:{fmt}}")
-                        with col2: st.metric("MAE", f"{results['mae']:{fmt}}")
-                        with col3: st.metric("R²", f"{results['r2']:.4f}")
-                        with col4: st.metric("Test Samples", len(y_test))
+                        with col1:
+                            st.metric("MAE", f"{results['mae']:,.2f}")
+                        with col2:
+                            st.metric("RMSE", f"{results['rmse']:,.2f}")
+                        with col3:
+                            st.metric("MAPE", f"{results['mape']:.1f}%")
+                        with col4:
+                            if results.get('coverage'):
+                                st.metric("80% Coverage", f"{results['coverage']:.0%}")
                         
-                        st.scatter_chart(pd.DataFrame({"Actual": results["y_test"], "Predicted": results["predictions"]}), x="Actual", y="Predicted")
+                        # Plot
+                        fig, ax = plt.subplots(figsize=(12, 5))
+                        fig.patch.set_facecolor('#f8f7ff')
+                        ax.set_facecolor('#f8f7ff')
+                        ax.plot(train_dates, y_train_ts, color='#667eea', linewidth=1.5, label='Training', alpha=0.7)
+                        ax.plot(test_dates, y_test_ts, color='#00b894', linewidth=2, marker='o', markersize=6, label='Actual')
+                        ax.plot(test_dates, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast')
+                        if results.get('y_lower') is not None:
+                            ax.fill_between(test_dates, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
+                        ax.set_xlabel('Date', color='#2d2d44')
+                        ax.set_ylabel(target_col, color='#2d2d44')
+                        ax.set_title(f'Forecast Evaluation', color='#1a1a2e', fontweight='bold')
+                        ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                        ax.tick_params(colors='#4a4a6a')
+                        ax.grid(True, alpha=0.3, color='#667eea')
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        # Results table
+                        results_df = pd.DataFrame({
+                            "Date": test_dates.strftime('%Y-%m-%d'),
+                            "Actual": y_test_ts,
+                            "Forecast": results['predictions'],
+                            "Error": y_test_ts - results['predictions']
+                        })
+                        st.dataframe(results_df, use_container_width=True)
+                        
+                        # Log to MLflow
+                        run_id, run_url, mlflow_err = log_to_mlflow(
+                            run_name=f"app_{selected_base_table}_forecast_eval",
+                            params={
+                                "dataset": selected_base_table,
+                                "model_type": "TabPFNRegressor",
+                                "task": "time_series_forecasting",
+                                "target_col": target_col,
+                                "date_col": date_col,
+                                "series_id": selected_series if series_id_col else "single_series",
+                                "n_lags": n_lags,
+                                "forecast_horizon": forecast_horizon,
+                                "train_samples": len(y_train_ts),
+                                "test_samples": len(y_test_ts),
+                                "random_state": random_state,
+                            },
+                            metrics={
+                                "mae": results['mae'],
+                                "rmse": results['rmse'],
+                                "mape": results['mape'],
+                            },
+                            task_type="forecast",
+                            operation_mode="evaluate",
+                            mlflow_config=mlflow_config
+                        )
+                        if run_id:
+                            if run_url:
+                                st.write(f"📋 MLflow Run: {run_id}")
+                                st.link_button("View in MLflow", run_url)
+                            else:
+                                st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                        elif mlflow_err:
+                            st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
                     
-                    st.success("✅ Prediction complete!")
-
+                    else:  # Score mode
+                        # Load score data
+                        with st.spinner(f"Loading {score_table}..."):
+                            df_score = load_table(conn, f"{CATALOG}.{SCHEMA}.{score_table}")
+                        
+                        # For time series scoring, we need to combine train + score data
+                        # to have sufficient history for lag features, then predict only on score timestamps
+                        
+                        if series_id_col:
+                            # Filter to the selected series from both datasets
+                            df_train_series = df_train[df_train[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
+                            df_score_series = df_score[df_score[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
+                            
+                            if len(df_score_series) == 0:
+                                st.error(f"Series '{selected_series}' not found in score dataset.")
+                                st.stop()
+                            
+                            # Combine train and score data for full history
+                            df_combined = pd.concat([df_train_series, df_score_series], ignore_index=True).sort_values(date_col).reset_index(drop=True)
+                            
+                            n_train_points = len(df_train_series)
+                            n_score_points = len(df_score_series)
+                            
+                            st.info(f"Training on series '{selected_series}' from _train ({n_train_points} points), predicting on _score ({n_score_points} points)")
+                            
+                            combined_values = df_combined[target_col].values
+                            combined_dates = df_combined[date_col].values
+                            
+                            # Create lag features from combined data
+                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
+                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
+                            
+                            # Split: features from train period for training, features from score period for prediction
+                            # After lag features, we lose n_lags points from the start
+                            # Train indices: 0 to (n_train_points - n_lags - 1)
+                            # Score indices: (n_train_points - n_lags) to end
+                            train_end_idx = n_train_points - n_lags
+                            
+                            X_train_ts = X_combined_enhanced[:train_end_idx]
+                            y_train_ts = y_combined[:train_end_idx]
+                            X_score_ts = X_combined_enhanced[train_end_idx:]
+                            
+                            # Run forecasting
+                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
+                            
+                            # Get dates for visualization
+                            all_dates = pd.to_datetime(combined_dates)
+                            train_dates_viz = all_dates[:n_train_points]
+                            train_values_viz = combined_values[:n_train_points]
+                            
+                            # Get score dates (dates corresponding to score predictions)
+                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
+                            score_dates_subset = score_dates_all[train_end_idx:]
+                            
+                            predictions_df = pd.DataFrame({
+                                "Series_ID": selected_series,
+                                "Date": score_dates_subset.strftime('%Y-%m-%d'),
+                                "Prediction": results['predictions']
+                            })
+                        else:
+                            # Single series - combine train and score data
+                            df_train_sorted = df_train.sort_values(date_col).reset_index(drop=True)
+                            df_score_sorted = df_score.sort_values(date_col).reset_index(drop=True)
+                            
+                            # Combine for full history
+                            df_combined = pd.concat([df_train_sorted, df_score_sorted], ignore_index=True).sort_values(date_col).reset_index(drop=True)
+                            
+                            n_train_points = len(df_train_sorted)
+                            n_score_points = len(df_score_sorted)
+                            
+                            combined_values = df_combined[target_col].values
+                            combined_dates = df_combined[date_col].values
+                            
+                            # Create lag features from combined data
+                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
+                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
+                            
+                            # Split features
+                            train_end_idx = n_train_points - n_lags
+                            
+                            X_train_ts = X_combined_enhanced[:train_end_idx]
+                            y_train_ts = y_combined[:train_end_idx]
+                            X_score_ts = X_combined_enhanced[train_end_idx:]
+                            
+                            # Run forecasting
+                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
+                            
+                            # Get dates for visualization
+                            all_dates = pd.to_datetime(combined_dates)
+                            train_dates_viz = all_dates[:n_train_points]
+                            train_values_viz = combined_values[:n_train_points]
+                            
+                            # Get score dates
+                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
+                            score_dates_subset = score_dates_all[train_end_idx:]
+                            
+                            predictions_df = pd.DataFrame({
+                                "Date": score_dates_subset.strftime('%Y-%m-%d'),
+                                "Prediction": results['predictions']
+                            })
+                        
+                        st.markdown('<div class="section-header">📊 Forecast Predictions on Score Data</div>', unsafe_allow_html=True)
+                        
+                        # Visualization
+                        fig, ax = plt.subplots(figsize=(12, 5))
+                        fig.patch.set_facecolor('#f8f7ff')
+                        ax.set_facecolor('#f8f7ff')
+                        
+                        # Plot training data (historical)
+                        ax.plot(train_dates_viz, train_values_viz, color='#667eea', linewidth=1.5, label='Historical (Train)', alpha=0.7)
+                        
+                        # Plot predictions for score period
+                        ax.plot(score_dates_subset, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast (Score)')
+                        
+                        # Add prediction intervals if available
+                        if results.get('y_lower') is not None:
+                            ax.fill_between(score_dates_subset, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
+                        
+                        # Add vertical line at train/score boundary
+                        ax.axvline(x=train_dates_viz.max(), color='#00b894', linestyle=':', linewidth=2, alpha=0.7, label='Train/Score Split')
+                        
+                        ax.set_xlabel('Date', color='#2d2d44')
+                        ax.set_ylabel(target_col, color='#2d2d44')
+                        title = f'Forecast: {selected_series}' if series_id_col else 'Forecast Predictions'
+                        ax.set_title(title, color='#1a1a2e', fontweight='bold')
+                        ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                        ax.tick_params(colors='#4a4a6a')
+                        ax.grid(True, alpha=0.3, color='#667eea')
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Training Samples", len(y_train_ts))
+                        with col2:
+                            st.metric("Score Samples", len(predictions_df))
+                        
+                        st.dataframe(predictions_df, use_container_width=True)
+                        
+                        # Log to MLflow
+                        run_id, run_url, mlflow_err = log_to_mlflow(
+                            run_name=f"app_{selected_base_table}_forecast_score",
+                            params={
+                                "dataset": selected_base_table,
+                                "model_type": "TabPFNRegressor",
+                                "task": "time_series_forecasting",
+                                "target_col": target_col,
+                                "date_col": date_col,
+                                "series_id": selected_series if series_id_col else "single_series",
+                                "n_lags": n_lags,
+                                "forecast_horizon": forecast_horizon,
+                                "train_samples": len(y_train_ts),
+                                "score_samples": len(predictions_df),
+                                "random_state": random_state,
+                            },
+                            metrics={},
+                            task_type="forecast",
+                            operation_mode="score",
+                            mlflow_config=mlflow_config
+                        )
+                        if run_id:
+                            if run_url:
+                                st.write(f"📋 MLflow Run: {run_id}")
+                                st.link_button("View in MLflow", run_url)
+                            else:
+                                st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                        elif mlflow_err:
+                            st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
+                        # Download button
+                        csv = predictions_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Predictions as CSV",
+                            data=csv,
+                            file_name=f"{selected_base_table}_forecast_predictions.csv",
+                            mime="text/csv"
+                        )
+                    
+                    st.success("✅ Forecasting complete!")
+                
+                # ============================================================
+                # CLASSIFICATION / REGRESSION
+                # ============================================================
+                else:
+                    if operation_mode == "Evaluate":
+                        # Prepare features from training data
+                        X, y, encoded_cols = prepare_features(df_train, feature_cols, target_col)
+                        
+                        # Sample if needed
+                        if max_samples and len(X) > max_samples:
+                            np.random.seed(random_state)
+                            idx = np.random.choice(len(X), max_samples, replace=False)
+                            X, y = X[idx], y[idx]
+                        
+                        # Split for evaluation
+                        from sklearn.model_selection import train_test_split
+                        stratify = y if prediction_mode == "Classification" else None
+                        X_train_model, X_test_model, y_train_model, y_test_model = train_test_split(
+                            X, y, test_size=test_size/100, random_state=random_state, stratify=stratify
+                        )
+                        
+                        if prediction_mode == "Classification":
+                            results = run_classification(X_train_model, y_train_model, X_test_model, y_test_model)
+                            
+                            st.markdown('<div class="section-header">📊 Classification Evaluation Results</div>', unsafe_allow_html=True)
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Accuracy", f"{results['accuracy']:.4f}")
+                            with col2:
+                                if results.get('roc_auc'):
+                                    st.metric("ROC AUC", f"{results['roc_auc']:.4f}")
+                            with col3:
+                                st.metric("Test Samples", len(y_test_model))
+                            
+                            # Visualization: Confusion Matrix
+                            y_true = results["y_test"]
+                            y_pred = results["predictions"]
+                            cm = confusion_matrix(y_true, y_pred)
+                            classes = np.unique(np.concatenate([y_true, y_pred]))
+                            
+                            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+                            fig.patch.set_facecolor('#f8f7ff')
+                            
+                            # Confusion Matrix Heatmap
+                            ax1 = axes[0]
+                            ax1.set_facecolor('#f8f7ff')
+                            im = ax1.imshow(cm, interpolation='nearest', cmap='Blues')
+                            ax1.figure.colorbar(im, ax=ax1, shrink=0.8)
+                            ax1.set(xticks=np.arange(cm.shape[1]),
+                                    yticks=np.arange(cm.shape[0]),
+                                    xticklabels=classes, yticklabels=classes,
+                                    ylabel='Actual', xlabel='Predicted')
+                            ax1.set_title('Confusion Matrix', color='#1a1a2e', fontweight='bold')
+                            ax1.tick_params(colors='#4a4a6a')
+                            
+                            # Add text annotations
+                            thresh = cm.max() / 2.
+                            for i in range(cm.shape[0]):
+                                for j in range(cm.shape[1]):
+                                    ax1.text(j, i, format(cm[i, j], 'd'),
+                                            ha="center", va="center",
+                                            color="white" if cm[i, j] > thresh else "black",
+                                            fontsize=12, fontweight='bold')
+                            
+                            # Class Distribution Bar Chart
+                            ax2 = axes[1]
+                            ax2.set_facecolor('#f8f7ff')
+                            
+                            # Count actual vs predicted for each class
+                            unique_classes = sorted(classes)
+                            actual_counts = [np.sum(y_true == c) for c in unique_classes]
+                            predicted_counts = [np.sum(y_pred == c) for c in unique_classes]
+                            
+                            x = np.arange(len(unique_classes))
+                            width = 0.35
+                            
+                            bars1 = ax2.bar(x - width/2, actual_counts, width, label='Actual', color='#667eea', alpha=0.8)
+                            bars2 = ax2.bar(x + width/2, predicted_counts, width, label='Predicted', color='#e056a0', alpha=0.8)
+                            
+                            ax2.set_xlabel('Class', color='#2d2d44')
+                            ax2.set_ylabel('Count', color='#2d2d44')
+                            ax2.set_title('Class Distribution: Actual vs Predicted', color='#1a1a2e', fontweight='bold')
+                            ax2.set_xticks(x)
+                            ax2.set_xticklabels([str(c) for c in unique_classes])
+                            ax2.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                            ax2.tick_params(colors='#4a4a6a')
+                            ax2.grid(True, alpha=0.3, color='#667eea', axis='y')
+                            
+                            # Add value labels on bars
+                            for bar in bars1:
+                                height = bar.get_height()
+                                ax2.annotate(f'{int(height)}',
+                                            xy=(bar.get_x() + bar.get_width() / 2, height),
+                                            xytext=(0, 3), textcoords="offset points",
+                                            ha='center', va='bottom', fontsize=10, color='#2d2d44')
+                            for bar in bars2:
+                                height = bar.get_height()
+                                ax2.annotate(f'{int(height)}',
+                                            xy=(bar.get_x() + bar.get_width() / 2, height),
+                                            xytext=(0, 3), textcoords="offset points",
+                                            ha='center', va='bottom', fontsize=10, color='#2d2d44')
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            
+                            # Results dataframe
+                            results_df = pd.DataFrame({
+                                "Actual": results["y_test"],
+                                "Predicted": results["predictions"],
+                                "Correct": results["y_test"] == results["predictions"]
+                            })
+                            
+                            # Add probabilities
+                            n_classes = results["probabilities"].shape[1]
+                            for i in range(n_classes):
+                                results_df[f"Prob_Class_{i}"] = results["probabilities"][:, i].round(4)
+                            
+                            st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_classification_eval",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNClassifier",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_model),
+                                    "test_samples": len(X_test_model),
+                                    "test_size_pct": test_size,
+                                    "random_state": random_state,
+                                    "n_classes": n_classes,
+                                },
+                                metrics={
+                                    "accuracy": results['accuracy'],
+                                    "roc_auc": results.get('roc_auc'),
+                                },
+                                task_type="classification",
+                                operation_mode="evaluate",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
+                        else:  # Regression
+                            results = run_regression(X_train_model, y_train_model, X_test_model, y_test_model)
+                            
+                            st.markdown('<div class="section-header">📊 Regression Evaluation Results</div>', unsafe_allow_html=True)
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("RMSE", f"{results['rmse']:.4f}")
+                            with col2:
+                                st.metric("MAE", f"{results['mae']:.4f}")
+                            with col3:
+                                st.metric("R²", f"{results['r2']:.4f}")
+                            with col4:
+                                st.metric("Test Samples", len(y_test_model))
+                            
+                            # Visualization
+                            y_true = results["y_test"]
+                            y_pred = results["predictions"]
+                            residuals = y_true - y_pred
+                            
+                            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+                            fig.patch.set_facecolor('#f8f7ff')
+                            
+                            # Actual vs Predicted Scatter Plot
+                            ax1 = axes[0]
+                            ax1.set_facecolor('#f8f7ff')
+                            ax1.scatter(y_true, y_pred, alpha=0.6, color='#667eea', edgecolors='white', linewidth=0.5, s=60)
+                            
+                            # Perfect prediction line
+                            min_val = min(y_true.min(), y_pred.min())
+                            max_val = max(y_true.max(), y_pred.max())
+                            ax1.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction', color='#e056a0')
+                            
+                            ax1.set_xlabel('Actual', color='#2d2d44')
+                            ax1.set_ylabel('Predicted', color='#2d2d44')
+                            ax1.set_title('Actual vs Predicted', color='#1a1a2e', fontweight='bold')
+                            ax1.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                            ax1.tick_params(colors='#4a4a6a')
+                            ax1.grid(True, alpha=0.3, color='#667eea')
+                            
+                            # Residuals Distribution
+                            ax2 = axes[1]
+                            ax2.set_facecolor('#f8f7ff')
+                            ax2.hist(residuals, bins=30, color='#667eea', alpha=0.7, edgecolor='white')
+                            ax2.axvline(x=0, color='#e056a0', linestyle='--', linewidth=2, label='Zero Error')
+                            ax2.axvline(x=residuals.mean(), color='#00b894', linestyle='-', linewidth=2, label=f'Mean: {residuals.mean():.2f}')
+                            
+                            ax2.set_xlabel('Residual (Actual - Predicted)', color='#2d2d44')
+                            ax2.set_ylabel('Frequency', color='#2d2d44')
+                            ax2.set_title('Residuals Distribution', color='#1a1a2e', fontweight='bold')
+                            ax2.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
+                            ax2.tick_params(colors='#4a4a6a')
+                            ax2.grid(True, alpha=0.3, color='#667eea', axis='y')
+                            
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            
+                            # Results dataframe
+                            results_df = pd.DataFrame({
+                                "Actual": y_true,
+                                "Predicted": y_pred,
+                                "Residual": residuals,
+                                "Abs Error": np.abs(residuals)
+                            })
+                            st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_regression_eval",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNRegressor",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_model),
+                                    "test_samples": len(X_test_model),
+                                    "test_size_pct": test_size,
+                                    "random_state": random_state,
+                                },
+                                metrics={
+                                    "rmse": results['rmse'],
+                                    "mae": results['mae'],
+                                    "r2": results['r2'],
+                                },
+                                task_type="regression",
+                                operation_mode="evaluate",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
+                        st.success("✅ Evaluation complete!")
+                    
+                    else:  # Score mode
+                        # Load score data
+                        with st.spinner(f"Loading {score_table}..."):
+                            df_score = load_table(conn, f"{CATALOG}.{SCHEMA}.{score_table}")
+                        
+                        # Prepare training features
+                        X_train_full, y_train_full, encoded_cols = prepare_features(df_train, feature_cols, target_col)
+                        
+                        # Sample if needed
+                        if max_samples and len(X_train_full) > max_samples:
+                            np.random.seed(random_state)
+                            idx = np.random.choice(len(X_train_full), max_samples, replace=False)
+                            X_train_full, y_train_full = X_train_full[idx], y_train_full[idx]
+                        
+                        # Prepare scoring features (same encoding)
+                        X_score, _, _ = prepare_features(df_score, feature_cols, target_col)
+                        
+                        if prediction_mode == "Classification":
+                            results = run_classification(X_train_full, y_train_full, X_score)
+                            
+                            st.markdown('<div class="section-header">📊 Classification Predictions</div>', unsafe_allow_html=True)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Training Samples", len(X_train_full))
+                            with col2:
+                                st.metric("Scored Samples", len(X_score))
+                            
+                            # Results dataframe - features and predictions only (exclude target column)
+                            display_cols = [col for col in df_score.columns if col != target_col]
+                            results_df = df_score[display_cols].copy()
+                            results_df["Prediction"] = results["predictions"]
+                            
+                            # Add probabilities
+                            n_classes = results["probabilities"].shape[1]
+                            for i in range(n_classes):
+                                results_df[f"Prob_Class_{i}"] = results["probabilities"][:, i].round(4)
+                            
+                            st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_classification_score",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNClassifier",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_full),
+                                    "score_samples": len(X_score),
+                                    "random_state": random_state,
+                                    "n_classes": n_classes,
+                                },
+                                metrics={},
+                                task_type="classification",
+                                operation_mode="score",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
+                        else:  # Regression
+                            results = run_regression(X_train_full, y_train_full, X_score)
+                            
+                            st.markdown('<div class="section-header">📊 Regression Predictions</div>', unsafe_allow_html=True)
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Training Samples", len(X_train_full))
+                            with col2:
+                                st.metric("Scored Samples", len(X_score))
+                            
+                            # Results dataframe - features and predictions only (exclude target column)
+                            display_cols = [col for col in df_score.columns if col != target_col]
+                            results_df = df_score[display_cols].copy()
+                            results_df["Prediction"] = results["predictions"]
+                            
+                            st.dataframe(results_df, use_container_width=True)
+                            
+                            # Log to MLflow
+                            run_id, run_url, mlflow_err = log_to_mlflow(
+                                run_name=f"app_{selected_base_table}_regression_score",
+                                params={
+                                    "dataset": selected_base_table,
+                                    "model_type": "TabPFNRegressor",
+                                    "target_col": target_col,
+                                    "n_features": len(feature_cols),
+                                    "train_samples": len(X_train_full),
+                                    "score_samples": len(X_score),
+                                    "random_state": random_state,
+                                },
+                                metrics={},
+                                task_type="regression",
+                                operation_mode="score",
+                                mlflow_config=mlflow_config
+                            )
+                            if run_id:
+                                if run_url:
+                                    st.write(f"📋 MLflow Run: {run_id}")
+                                    st.link_button("View in MLflow", run_url)
+                                else:
+                                    st.caption(f"📋 MLflow Run ID: `{run_id}`")
+                            elif mlflow_err:
+                                st.caption(f"⚠️ MLflow logging failed: {mlflow_err}")
+                        
+                        st.success("✅ Scoring complete!")
+                        
+                        # Download button
+                        csv = results_df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Predictions as CSV",
+                            data=csv,
+                            file_name=f"{selected_base_table}_predictions.csv",
+                            mime="text/csv"
+                        )
+    
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")
         st.exception(e)
