@@ -44,7 +44,7 @@ At enterprise scale, this creates **significant operational overhead**. Organiza
 - Eliminates the need for **model training, hyperparameter tuning, and complex experimentation**
 - Delivers performance **comparable to, or better than**, many carefully tuned traditional models
 
-This is exactly what [**TabPFN**](https://priorlabs.ai/) enables.
+This is exactly what [**TabPFN**](https://docs.priorlabs.ai/overview/) enables.
 
 TabPFN (Tabular Prior-Data Fitted Network) is a **foundation model for tabular prediction** developed by Prior Labs. It has been pretrained on millions of synthetic datasets to learn general patterns in tabular data, allowing it to make accurate predictions on new datasets **without any training**.
 
