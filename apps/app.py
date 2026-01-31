@@ -26,6 +26,20 @@ import mlflow
 import os
 from datetime import datetime
 
+# TabPFN Time Series imports for forecasting
+try:
+    from tabpfn_time_series import (
+        TimeSeriesDataFrame,
+        FeatureTransformer,
+        TabPFNTimeSeriesPredictor,
+        TabPFNMode,
+    )
+    from tabpfn_time_series.data_preparation import generate_test_X
+    from tabpfn_time_series.features import RunningIndexFeature, CalendarFeature, AutoSeasonalFeature
+    TABPFN_TS_AVAILABLE = True
+except ImportError:
+    TABPFN_TS_AVAILABLE = False
+
 
 # Page configuration
 st.set_page_config(
@@ -536,8 +550,43 @@ def run_regression(X_train, y_train, X_test=None, y_test=None):
     return {"model": reg}
 
 
+def pandas_to_time_series_dataframe(df, item_id_col, timestamp_col, target_col):
+    """
+    Convert a pandas DataFrame to a TimeSeriesDataFrame.
+    
+    Args:
+        df: pandas DataFrame with time series data
+        item_id_col: Column name for series identifier
+        timestamp_col: Column name for timestamps
+        target_col: Column name for target values
+    
+    Returns:
+        TimeSeriesDataFrame
+    """
+    if not TABPFN_TS_AVAILABLE:
+        raise ImportError("tabpfn-time-series package is required for forecasting")
+    
+    # Prepare the data with proper index
+    df_ts = df[[item_id_col, timestamp_col, target_col]].copy()
+    df_ts = df_ts.rename(columns={
+        item_id_col: 'item_id',
+        timestamp_col: 'timestamp',
+        target_col: 'target'
+    })
+    
+    # Ensure timestamp is datetime64[ns] dtype without timezone (required by TimeSeriesDataFrame)
+    df_ts['timestamp'] = pd.to_datetime(df_ts['timestamp']).dt.tz_localize(None)
+    # Force to datetime64[ns] dtype
+    df_ts['timestamp'] = df_ts['timestamp'].astype('datetime64[ns]')
+    
+    df_ts = df_ts.sort_values(['item_id', 'timestamp'])
+    df_ts = df_ts.set_index(['item_id', 'timestamp'])
+    
+    return TimeSeriesDataFrame(df_ts)
+
+
 def create_lag_features(series: np.ndarray, n_lags: int = 12):
-    """Create lag features for time series forecasting."""
+    """Create lag features for time series forecasting (legacy fallback)."""
     X, y = [], []
     for i in range(n_lags, len(series)):
         X.append(series[i-n_lags:i])
@@ -546,7 +595,7 @@ def create_lag_features(series: np.ndarray, n_lags: int = 12):
 
 
 def add_calendar_features(X: np.ndarray, dates, n_lags: int):
-    """Add calendar features to lag features."""
+    """Add calendar features to lag features (legacy fallback)."""
     dates_subset = pd.to_datetime(dates[n_lags:])
     months = np.array([d.month for d in dates_subset])
     years = np.array([d.year for d in dates_subset])
@@ -555,8 +604,86 @@ def add_calendar_features(X: np.ndarray, dates, n_lags: int):
     return np.column_stack([X, month_sin, month_cos, years - years.min()])
 
 
+def run_forecasting_tabpfn_ts(tsdf_train, tsdf_test_X, tsdf_test_y=None, forecast_horizon=6):
+    """
+    Run time series forecasting with TabPFNTimeSeriesPredictor.
+    
+    Args:
+        tsdf_train: TimeSeriesDataFrame for training
+        tsdf_test_X: TimeSeriesDataFrame with test features
+        tsdf_test_y: Optional TimeSeriesDataFrame with actual test values
+        forecast_horizon: Number of periods to forecast
+    
+    Returns:
+        dict with predictions, metrics, and prediction intervals
+    """
+    if not TABPFN_TS_AVAILABLE:
+        raise ImportError("tabpfn-time-series package is required for forecasting")
+    
+    # Add temporal and seasonal features
+    features = [
+        RunningIndexFeature(),
+        CalendarFeature(),
+        AutoSeasonalFeature()
+    ]
+    transformer = FeatureTransformer(features)
+    train_feat, test_X_feat = transformer.transform(tsdf_train, tsdf_test_X)
+    
+    # Initialize predictor
+    predictor = TabPFNTimeSeriesPredictor(tabpfn_mode=TabPFNMode.CLIENT)
+    
+    # Generate forecasts
+    pred = predictor.predict(train_feat, test_X_feat)
+    
+    # Extract predictions
+    pred_col = 'mean' if 'mean' in pred.columns else pred.columns[0]
+    y_pred = pred[pred_col].values
+    
+    results = {
+        "predictions": y_pred,
+        "predictor": predictor,
+        "features_used": list(train_feat.columns),
+    }
+    
+    # Extract prediction intervals if available
+    if 'q0.1' in pred.columns and 'q0.9' in pred.columns:
+        results["y_lower"] = pred['q0.1'].values
+        results["y_upper"] = pred['q0.9'].values
+    elif 'q0.05' in pred.columns and 'q0.95' in pred.columns:
+        results["y_lower"] = pred['q0.05'].values
+        results["y_upper"] = pred['q0.95'].values
+    else:
+        # Simple estimate if quantiles not available
+        results["y_lower"] = y_pred * 0.9
+        results["y_upper"] = y_pred * 1.1
+    
+    # Calculate metrics if actual values provided
+    if tsdf_test_y is not None:
+        y_test = tsdf_test_y['target'].values
+        min_len = min(len(y_test), len(y_pred))
+        y_test = y_test[:min_len]
+        y_pred_eval = y_pred[:min_len]
+        
+        mae = mean_absolute_error(y_test, y_pred_eval)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred_eval))
+        mape = np.mean(np.abs((y_test - y_pred_eval) / (y_test + 1e-8))) * 100
+        
+        results["mae"] = mae
+        results["rmse"] = rmse
+        results["mape"] = mape
+        results["y_test"] = y_test
+        
+        # Calculate coverage
+        y_lower = results["y_lower"][:min_len]
+        y_upper = results["y_upper"][:min_len]
+        coverage = np.mean((y_test >= y_lower) & (y_test <= y_upper))
+        results["coverage"] = coverage
+    
+    return results
+
+
 def run_forecasting(X_train, y_train, X_test=None, y_test=None):
-    """Run time series forecasting with TabPFN."""
+    """Run time series forecasting with TabPFN (legacy fallback)."""
     reg = TabPFNRegressor()
     reg.fit(X_train, y_train)
     
@@ -1099,11 +1226,16 @@ else:
                 max_samples = None
         
         if prediction_mode == "Forecast":
-            col1, col2 = st.columns(2)
-            with col1:
-                n_lags = st.slider("Number of Lag Features", 3, 24, 12)
-            with col2:
-                forecast_horizon = st.slider("Forecast Horizon", 1, 12, 6)
+            st.markdown("""
+            <div style="padding: 0.75rem; background: rgba(102, 126, 234, 0.08); border-radius: 8px; margin-bottom: 1rem;">
+                <strong>TabPFN Time Series</strong><br>
+                <span style="font-size: 0.9rem; color: #5a5a7a;">
+                    Uses automatic feature engineering with RunningIndexFeature, CalendarFeature, and AutoSeasonalFeature.
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            forecast_horizon = st.slider("Forecast Horizon", 1, 24, 6, help="Number of periods to forecast ahead")
             
             if series_id_col:
                 unique_series = df_train[series_id_col].unique().tolist()
@@ -1123,57 +1255,92 @@ else:
                 # FORECASTING
                 # ============================================================
                 if prediction_mode == "Forecast":
-                    # Prepare time series data
+                    # Check if TabPFN Time Series is available
+                    if not TABPFN_TS_AVAILABLE:
+                        st.error("⚠️ tabpfn-time-series package is not installed. Please install it to use forecasting features.")
+                        st.stop()
+                    
+                    # Prepare time series data using TimeSeriesDataFrame
                     if series_id_col:
                         df_series = df_train[df_train[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
+                        # Create a temporary series_id column for single series
+                        df_series['_series_id'] = selected_series
                     else:
                         df_series = df_train.sort_values(date_col).reset_index(drop=True)
+                        df_series['_series_id'] = 'single_series'
                     
-                    values = df_series[target_col].values
-                    dates = df_series[date_col].values
-                    
-                    if len(values) < n_lags + forecast_horizon + 5:
+                    if len(df_series) < forecast_horizon + 10:
                         st.error("Not enough data points for the selected configuration.")
                         st.stop()
                     
-                    # Create lag features
-                    X, y = create_lag_features(values, n_lags)
-                    X_enhanced = add_calendar_features(X, dates, n_lags)
+                    # Convert to TimeSeriesDataFrame
+                    tsdf = pandas_to_time_series_dataframe(
+                        df_series,
+                        item_id_col='_series_id',
+                        timestamp_col=date_col,
+                        target_col=target_col
+                    )
                     
                     if operation_mode == "Evaluate":
-                        # Split for evaluation
-                        X_train_ts, X_test_ts = X_enhanced[:-forecast_horizon], X_enhanced[-forecast_horizon:]
-                        y_train_ts, y_test_ts = y[:-forecast_horizon], y[-forecast_horizon:]
-                        test_dates = pd.to_datetime(dates[n_lags:])[-forecast_horizon:]
-                        train_dates = pd.to_datetime(dates[n_lags:])[:-forecast_horizon]
+                        # Split into training and test portions
+                        train_tsdf, test_tsdf = tsdf.train_test_split(prediction_length=forecast_horizon)
+                        test_X = generate_test_X(train_tsdf, forecast_horizon)
                         
-                        results = run_forecasting(X_train_ts, y_train_ts, X_test_ts, y_test_ts)
+                        # Get dates for visualization
+                        train_dates = train_tsdf.index.get_level_values('timestamp')
+                        # Note: test_tsdf from train_test_split contains the full series, not just test portion
+                        # Get only the last forecast_horizon dates from the original series
+                        test_dates = tsdf.index.get_level_values('timestamp')[-forecast_horizon:]
+                        train_values = train_tsdf['target'].values
+                        
+                        # Get actual test values (last forecast_horizon values from original series)
+                        y_test_actual = tsdf['target'].values[-forecast_horizon:]
+                        
+                        # Run forecasting with TabPFNTimeSeriesPredictor
+                        # Pass None for test_tsdf since we'll compute metrics ourselves
+                        results = run_forecasting_tabpfn_ts(
+                            train_tsdf, test_X, None, forecast_horizon
+                        )
+                        
+                        # Compute metrics
+                        y_pred = results['predictions']
+                        min_len = min(len(y_test_actual), len(y_pred))
+                        y_test_eval = y_test_actual[:min_len]
+                        y_pred_eval = y_pred[:min_len]
+                        
+                        mae = mean_absolute_error(y_test_eval, y_pred_eval)
+                        rmse = np.sqrt(mean_squared_error(y_test_eval, y_pred_eval))
+                        mape = np.mean(np.abs((y_test_eval - y_pred_eval) / (y_test_eval + 1e-8))) * 100
+                        
+                        # Calculate coverage
+                        y_lower = results['y_lower'][:min_len]
+                        y_upper = results['y_upper'][:min_len]
+                        coverage = np.mean((y_test_eval >= y_lower) & (y_test_eval <= y_upper))
                         
                         # Display results
                         st.markdown('<div class="section-header">📊 Forecast Evaluation Results</div>', unsafe_allow_html=True)
                         col1, col2, col3, col4 = st.columns(4)
                         with col1:
-                            st.metric("MAE", f"{results['mae']:,.2f}")
+                            st.metric("MAE", f"{mae:,.2f}")
                         with col2:
-                            st.metric("RMSE", f"{results['rmse']:,.2f}")
+                            st.metric("RMSE", f"{rmse:,.2f}")
                         with col3:
-                            st.metric("MAPE", f"{results['mape']:.1f}%")
+                            st.metric("MAPE", f"{mape:.1f}%")
                         with col4:
-                            if results.get('coverage'):
-                                st.metric("80% Coverage", f"{results['coverage']:.0%}")
+                            st.metric("80% Coverage", f"{coverage:.0%}")
                         
                         # Plot
                         fig, ax = plt.subplots(figsize=(12, 5))
                         fig.patch.set_facecolor('#f8f7ff')
                         ax.set_facecolor('#f8f7ff')
-                        ax.plot(train_dates, y_train_ts, color='#667eea', linewidth=1.5, label='Training', alpha=0.7)
-                        ax.plot(test_dates, y_test_ts, color='#00b894', linewidth=2, marker='o', markersize=6, label='Actual')
-                        ax.plot(test_dates, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast')
+                        ax.plot(train_dates, train_values, color='#667eea', linewidth=1.5, label='Training', alpha=0.7)
+                        ax.plot(test_dates, y_test_eval, color='#00b894', linewidth=2, marker='o', markersize=6, label='Actual')
+                        ax.plot(test_dates, y_pred_eval, color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast')
                         if results.get('y_lower') is not None:
-                            ax.fill_between(test_dates, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
+                            ax.fill_between(test_dates, y_lower, y_upper, alpha=0.15, color='#e056a0', label='80% Interval')
                         ax.set_xlabel('Date', color='#2d2d44')
                         ax.set_ylabel(target_col, color='#2d2d44')
-                        ax.set_title(f'Forecast Evaluation', color='#1a1a2e', fontweight='bold')
+                        ax.set_title(f'Forecast Evaluation (TabPFNTimeSeriesPredictor)', color='#1a1a2e', fontweight='bold')
                         ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
                         ax.tick_params(colors='#4a4a6a')
                         ax.grid(True, alpha=0.3, color='#667eea')
@@ -1183,10 +1350,10 @@ else:
                         
                         # Results table
                         results_df = pd.DataFrame({
-                            "Date": test_dates.strftime('%Y-%m-%d'),
-                            "Actual": y_test_ts,
-                            "Forecast": results['predictions'],
-                            "Error": y_test_ts - results['predictions']
+                            "Date": pd.to_datetime(test_dates).strftime('%Y-%m-%d'),
+                            "Actual": y_test_eval,
+                            "Forecast": y_pred_eval,
+                            "Error": y_test_eval - y_pred_eval
                         })
                         st.dataframe(results_df, use_container_width=True)
                         
@@ -1195,21 +1362,22 @@ else:
                             run_name=f"app_{selected_base_table}_forecast_eval",
                             params={
                                 "dataset": selected_base_table,
-                                "model_type": "TabPFNRegressor",
+                                "model_type": "TabPFNTimeSeriesPredictor",
+                                "tabpfn_mode": "CLIENT",
                                 "task": "time_series_forecasting",
                                 "target_col": target_col,
                                 "date_col": date_col,
                                 "series_id": selected_series if series_id_col else "single_series",
-                                "n_lags": n_lags,
                                 "forecast_horizon": forecast_horizon,
-                                "train_samples": len(y_train_ts),
-                                "test_samples": len(y_test_ts),
+                                "train_samples": len(train_values),
+                                "test_samples": len(y_test_eval),
+                                "features_used": str(results.get('features_used', [])),
                                 "random_state": random_state,
                             },
                             metrics={
-                                "mae": results['mae'],
-                                "rmse": results['rmse'],
-                                "mape": results['mape'],
+                                "mae": mae,
+                                "rmse": rmse,
+                                "mape": mape,
                             },
                             task_type="forecast",
                             operation_mode="evaluate",
@@ -1229,11 +1397,8 @@ else:
                         with st.spinner(f"Loading {score_table}..."):
                             df_score = load_table(conn, f"{CATALOG}.{SCHEMA}.{score_table}")
                         
-                        # For time series scoring, we need to combine train + score data
-                        # to have sufficient history for lag features, then predict only on score timestamps
-                        
+                        # For time series scoring, combine train data for full history
                         if series_id_col:
-                            # Filter to the selected series from both datasets
                             df_train_series = df_train[df_train[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
                             df_score_series = df_score[df_score[series_id_col] == selected_series].sort_values(date_col).reset_index(drop=True)
                             
@@ -1241,88 +1406,70 @@ else:
                                 st.error(f"Series '{selected_series}' not found in score dataset.")
                                 st.stop()
                             
-                            # Combine train and score data for full history
-                            df_combined = pd.concat([df_train_series, df_score_series], ignore_index=True).sort_values(date_col).reset_index(drop=True)
-                            
                             n_train_points = len(df_train_series)
                             n_score_points = len(df_score_series)
                             
                             st.info(f"Training on series '{selected_series}' from _train ({n_train_points} points), predicting on _score ({n_score_points} points)")
                             
-                            combined_values = df_combined[target_col].values
-                            combined_dates = df_combined[date_col].values
+                            # Prepare train TimeSeriesDataFrame
+                            df_train_series['_series_id'] = selected_series
+                            train_tsdf = pandas_to_time_series_dataframe(
+                                df_train_series,
+                                item_id_col='_series_id',
+                                timestamp_col=date_col,
+                                target_col=target_col
+                            )
                             
-                            # Create lag features from combined data
-                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
-                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
+                            # Generate test X for the score period length
+                            test_X = generate_test_X(train_tsdf, n_score_points)
                             
-                            # Split: features from train period for training, features from score period for prediction
-                            # After lag features, we lose n_lags points from the start
-                            # Train indices: 0 to (n_train_points - n_lags - 1)
-                            # Score indices: (n_train_points - n_lags) to end
-                            train_end_idx = n_train_points - n_lags
-                            
-                            X_train_ts = X_combined_enhanced[:train_end_idx]
-                            y_train_ts = y_combined[:train_end_idx]
-                            X_score_ts = X_combined_enhanced[train_end_idx:]
-                            
-                            # Run forecasting
-                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
-                            
-                            # Get dates for visualization
-                            all_dates = pd.to_datetime(combined_dates)
-                            train_dates_viz = all_dates[:n_train_points]
-                            train_values_viz = combined_values[:n_train_points]
-                            
-                            # Get score dates (dates corresponding to score predictions)
-                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
-                            score_dates_subset = score_dates_all[train_end_idx:]
-                            
-                            predictions_df = pd.DataFrame({
-                                "Series_ID": selected_series,
-                                "Date": score_dates_subset.strftime('%Y-%m-%d'),
-                                "Prediction": results['predictions']
-                            })
                         else:
-                            # Single series - combine train and score data
                             df_train_sorted = df_train.sort_values(date_col).reset_index(drop=True)
                             df_score_sorted = df_score.sort_values(date_col).reset_index(drop=True)
-                            
-                            # Combine for full history
-                            df_combined = pd.concat([df_train_sorted, df_score_sorted], ignore_index=True).sort_values(date_col).reset_index(drop=True)
                             
                             n_train_points = len(df_train_sorted)
                             n_score_points = len(df_score_sorted)
                             
-                            combined_values = df_combined[target_col].values
-                            combined_dates = df_combined[date_col].values
+                            # Prepare train TimeSeriesDataFrame
+                            df_train_sorted['_series_id'] = 'single_series'
+                            train_tsdf = pandas_to_time_series_dataframe(
+                                df_train_sorted,
+                                item_id_col='_series_id',
+                                timestamp_col=date_col,
+                                target_col=target_col
+                            )
                             
-                            # Create lag features from combined data
-                            X_combined, y_combined = create_lag_features(combined_values, n_lags)
-                            X_combined_enhanced = add_calendar_features(X_combined, combined_dates, n_lags)
-                            
-                            # Split features
-                            train_end_idx = n_train_points - n_lags
-                            
-                            X_train_ts = X_combined_enhanced[:train_end_idx]
-                            y_train_ts = y_combined[:train_end_idx]
-                            X_score_ts = X_combined_enhanced[train_end_idx:]
-                            
-                            # Run forecasting
-                            results = run_forecasting(X_train_ts, y_train_ts, X_score_ts, None)
-                            
-                            # Get dates for visualization
-                            all_dates = pd.to_datetime(combined_dates)
-                            train_dates_viz = all_dates[:n_train_points]
-                            train_values_viz = combined_values[:n_train_points]
-                            
-                            # Get score dates
-                            score_dates_all = pd.to_datetime(combined_dates[n_lags:])
-                            score_dates_subset = score_dates_all[train_end_idx:]
-                            
+                            # Generate test X for the score period length
+                            test_X = generate_test_X(train_tsdf, n_score_points)
+                        
+                        # Run forecasting with TabPFNTimeSeriesPredictor
+                        results = run_forecasting_tabpfn_ts(
+                            train_tsdf, test_X, None, n_score_points
+                        )
+                        
+                        # Get dates for visualization
+                        train_dates_viz = train_tsdf.index.get_level_values('timestamp')
+                        train_values_viz = train_tsdf['target'].values
+                        
+                        # Get score dates from the score dataset
+                        if series_id_col:
+                            score_dates_subset = pd.to_datetime(df_score_series[date_col])
+                        else:
+                            score_dates_subset = pd.to_datetime(df_score_sorted[date_col])
+                        
+                        # Adjust predictions to match score dates
+                        predictions_len = min(len(results['predictions']), len(score_dates_subset))
+                        
+                        if series_id_col:
                             predictions_df = pd.DataFrame({
-                                "Date": score_dates_subset.strftime('%Y-%m-%d'),
-                                "Prediction": results['predictions']
+                                "Series_ID": selected_series,
+                                "Date": score_dates_subset[:predictions_len].dt.strftime('%Y-%m-%d'),
+                                "Prediction": results['predictions'][:predictions_len]
+                            })
+                        else:
+                            predictions_df = pd.DataFrame({
+                                "Date": score_dates_subset[:predictions_len].dt.strftime('%Y-%m-%d'),
+                                "Prediction": results['predictions'][:predictions_len]
                             })
                         
                         st.markdown('<div class="section-header">📊 Forecast Predictions on Score Data</div>', unsafe_allow_html=True)
@@ -1336,11 +1483,11 @@ else:
                         ax.plot(train_dates_viz, train_values_viz, color='#667eea', linewidth=1.5, label='Historical (Train)', alpha=0.7)
                         
                         # Plot predictions for score period
-                        ax.plot(score_dates_subset, results['predictions'], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast (Score)')
+                        ax.plot(score_dates_subset[:predictions_len], results['predictions'][:predictions_len], color='#e056a0', linewidth=2, marker='s', markersize=6, linestyle='--', label='Forecast (Score)')
                         
                         # Add prediction intervals if available
                         if results.get('y_lower') is not None:
-                            ax.fill_between(score_dates_subset, results['y_lower'], results['y_upper'], alpha=0.15, color='#e056a0', label='80% Interval')
+                            ax.fill_between(score_dates_subset[:predictions_len], results['y_lower'][:predictions_len], results['y_upper'][:predictions_len], alpha=0.15, color='#e056a0', label='80% Interval')
                         
                         # Add vertical line at train/score boundary
                         ax.axvline(x=train_dates_viz.max(), color='#00b894', linestyle=':', linewidth=2, alpha=0.7, label='Train/Score Split')
@@ -1348,7 +1495,7 @@ else:
                         ax.set_xlabel('Date', color='#2d2d44')
                         ax.set_ylabel(target_col, color='#2d2d44')
                         title = f'Forecast: {selected_series}' if series_id_col else 'Forecast Predictions'
-                        ax.set_title(title, color='#1a1a2e', fontweight='bold')
+                        ax.set_title(f'{title} (TabPFNTimeSeriesPredictor)', color='#1a1a2e', fontweight='bold')
                         ax.legend(facecolor='#ffffff', edgecolor='#e0e0e0', labelcolor='#2d2d44')
                         ax.tick_params(colors='#4a4a6a')
                         ax.grid(True, alpha=0.3, color='#667eea')
@@ -1358,7 +1505,7 @@ else:
                         
                         col1, col2 = st.columns(2)
                         with col1:
-                            st.metric("Training Samples", len(y_train_ts))
+                            st.metric("Training Samples", len(train_values_viz))
                         with col2:
                             st.metric("Score Samples", len(predictions_df))
                         
@@ -1369,15 +1516,16 @@ else:
                             run_name=f"app_{selected_base_table}_forecast_score",
                             params={
                                 "dataset": selected_base_table,
-                                "model_type": "TabPFNRegressor",
+                                "model_type": "TabPFNTimeSeriesPredictor",
+                                "tabpfn_mode": "CLIENT",
                                 "task": "time_series_forecasting",
                                 "target_col": target_col,
                                 "date_col": date_col,
                                 "series_id": selected_series if series_id_col else "single_series",
-                                "n_lags": n_lags,
                                 "forecast_horizon": forecast_horizon,
-                                "train_samples": len(y_train_ts),
+                                "train_samples": len(train_values_viz),
                                 "score_samples": len(predictions_df),
+                                "features_used": str(results.get('features_used', [])),
                                 "random_state": random_state,
                             },
                             metrics={},

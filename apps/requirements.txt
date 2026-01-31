@@ -7,6 +7,7 @@ streamlit>=1.30.0
 
 # TabPFN Client
 tabpfn-client>=0.1.0
+tabpfn-time-series>=0.1.0
 
 # Data Science
 pandas>=2.0.0
